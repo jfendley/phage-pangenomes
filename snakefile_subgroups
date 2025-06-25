@@ -1,0 +1,350 @@
+"""
+This pipeline runs the analyses on subgroups and regions with multiple haplotypes. 
+    It create figures 7 and S7.
+
+Author: Jemma M. Fendley
+"""
+
+import json
+
+
+configfile: "config_subgroups.yaml"
+
+
+wildcard_constraints:
+    pham_ID="\d+",
+
+
+# load the dictionary of subgroups to their phages
+with open(config["subgroup_phages"]) as f:
+    subgroup_phages = json.load(f)
+all_subgroups = [x for x, y in subgroup_phages.items() if len(y) >= 10]
+
+# load the subgroup to group dictionary
+with open(config["subgroup_to_group"]) as f:
+    subgroup_to_group = json.load(f)
+all_groups = list(set([y for x, y in subgroup_to_group.items() if x in all_subgroups]))
+group_to_subgroups = {
+    x: [y for y, z in subgroup_to_group.items() if y in all_subgroups and z == x]
+    for x in all_groups
+}
+
+# extract the list of nonsyntenic and cyclic groups
+with open(config["nonsyntenic_groups"]) as f:
+    synteny_info = json.load(f)
+nonsyntenic_groups, cyclic_groups = [
+    x["name"]
+    for x in synteny_info["nonsyntenic_groups"]
+    if x["synteny"] == "nonsyntenic"
+], [x["name"] for x in synteny_info["nonsyntenic_groups"] if x["synteny"] == "cyclic"]
+
+# create a dictionary of cyclic groups to their nonsyntenic phages
+cyclic_nonsyntenic_phages = {
+    x["name"]: x["nonsyntenic_phages"]
+    for x in synteny_info["nonsyntenic_groups"]
+    if x["synteny"] == "cyclic"
+}
+
+# create a dictionary of groups to their synteny type
+group_synteny = {
+    x: (
+        "cyclic"
+        if x in cyclic_groups
+        else "nonsyntenic" if x in nonsyntenic_groups else "syntenic"
+    )
+    for x in all_groups
+}
+
+with open(config["groups_to_process"]) as f:
+    details = json.load(f)
+    process_groups = [x["name"] for x in details]
+    process_start = {x["name"]: x["start"] for x in details}
+    process_end = {x["name"]: x["end"] for x in details}
+    process_n = {x["name"]: x["n_haplotypes"] for x in details}
+
+
+def core_starts(group):
+    return (
+        "results/groups/"
+        + group
+        + "/"
+        + group
+        + "_core/"
+        + group
+        + "_core_pham_starts.json"
+    )
+
+
+def core_strands(group):
+    return (
+        "results/groups/"
+        + group
+        + "/"
+        + group
+        + "_core/"
+        + group
+        + "_core_pham_strands.json"
+    )
+
+
+# creates the core genome for the subgroup
+rule subgroup_core_genome:
+    input:
+        "results/groups/{group}/{group}_core/{group}_core_genome.fa",
+    params:
+        phages=lambda w: subgroup_phages[w.subgroup],
+    output:
+        "results/groups/{group}/{group}_core/{group}_subgroups/{subgroup}_core_genome.fa",
+    shell:
+        """
+        python scripts/subgroup_core_genome.py -i {input} -o {output} -p {params.phages} 
+        """
+
+
+# calculate the SNP density at each position in core genome alignment, which is used to
+#   weight the linkage disequilibrium analysis
+rule snp_density:
+    input:
+        rules.subgroup_core_genome.output,
+    output:
+        weights="results/groups/{group}/{group}_core/{group}_subgroups/{subgroup}_snp_density.json",
+        fig="results/groups/{group}/{group}_core/{group}_subgroups/{subgroup}_snp_density.png",
+    shell:
+        """
+        python scripts/snp_density.py -o {output.weights} -f {output.fig} -i {input}
+        """
+
+
+# creates a dictionary of core position to position in a reference genome
+rule reference_core_positions:
+    input:
+        reference_phage="data/phages/{ID}/{ID}.gbk",
+        core_genome=rules.subgroup_core_genome.output,
+        pham_starts=lambda w: core_starts(w.group),
+        strands=lambda w: core_strands(w.group),
+    output:
+        "results/groups/{group}/{group}_core/{group}_subgroups/{subgroup}_positions_{ID}.json",
+    shell:
+        """
+        python scripts/reference_positions.py -o {output} -r {input.reference_phage} -c {input.core_genome} -s {input.pham_starts} -d {input.strands}
+        """
+
+
+def get_reference_positions(subgroup, group, number):
+    """
+    returns the files containing the dictionaries of core genome alignment location to reference phage location,
+        for a specified number of reference phages
+    """
+    if group_synteny[group] == "cyclic":
+        syntenic_phages = [
+            x
+            for x in subgroup_phages[subgroup]
+            if x not in cyclic_nonsyntenic_phages[group]
+        ]
+    else:
+        syntenic_phages = subgroup_phages[subgroup]
+    return expand(
+        rules.reference_core_positions.output,
+        group=group,
+        subgroup=subgroup,
+        ID=syntenic_phages[:number],
+    )
+
+
+# calculates the linkage disequilbirium for each pair of SNPs in core genome
+rule linkage_disequilibrium:
+    input:
+        core_genome=rules.subgroup_core_genome.output,
+        positions="results/groups/{group}/{group}_core/{group}_position_pham.tsv",
+    output:
+        "results/groups/{group}/{group}_core/{group}_subgroups/{subgroup}_linkage.feather",
+    shell:
+        """
+        python scripts/linkage_disequilibrium.py -o {output} -i {input.core_genome} -p {input.positions}
+        """
+
+
+# plots the distribution of regions of high linkage across the core genome alignment
+rule linkage_distribution:
+    input:
+        linkage=rules.linkage_disequilibrium.output,
+        core_genome=rules.subgroup_core_genome.output,
+    output:
+        "results/groups/{group}/{group}_core/{group}_subgroups/{subgroup}_linkage_distribution.png",
+    shell:
+        """
+        python scripts/linkage_distribution.py -o {output} -l {input.linkage} -c {input.core_genome}
+        """
+
+
+# plot the linkage disequilibrium as a function of core genome distance
+rule plot_linkage_disequilibrium_subgroup:
+    input:
+        linkage=rules.linkage_disequilibrium.output,
+        reference_phage=lambda w: get_reference_positions(w.subgroup, w.group, 1),
+        weights=rules.snp_density.output.weights,
+    output:
+        fig="results/groups/{group}/{group}_core/{group}_subgroups/{subgroup}_linkage.png",
+        data="results/groups/{group}/{group}_core/{group}_subgroups/{subgroup}_linkage_statistics.tsv",
+    shell:
+        """
+        python scripts/plot_linkage.py -o {output.fig} -s {output.data} -l {input.linkage} -r {input.reference_phage} -w {input.weights}
+        """
+
+
+def all_subgroups(group):
+    """
+    returns all of the subgroup analysis excluding linkage
+    """
+    return [
+        get_reference_positions(subgroup, group, 1)
+        for subgroup in group_to_subgroups[group]
+    ], expand(
+        rules.snp_density.output,
+        group=group,
+        subgroup=group_to_subgroups[group],
+    )
+
+
+def plot_all_subgroups(group):
+    """
+    returns all of the subgroup linkage plots
+    """
+    return expand(
+        rules.plot_linkage_disequilibrium_subgroup.output,
+        group=group,
+        subgroup=group_to_subgroups[group],
+    ), expand(
+        rules.linkage_distribution.output,
+        group=group,
+        subgroup=group_to_subgroups[group],
+    )
+
+
+# plots the figure that shows the linkage of the subgroups of DE1
+rule plot_subgroups_DE1:
+    input:
+        group_linkage="results/groups/DE1/DE1_core/DE1_linkage.feather",
+        group_weights="results/groups/DE1/DE1_core/DE1_snp_density.json",
+        core_genome="results/groups/DE1/DE1_core/DE1_core_genome.fa",
+        linkage=expand(
+            rules.linkage_disequilibrium.output,
+            group="DE1",
+            subgroup=group_to_subgroups["DE1"],
+        ),
+        weights=expand(
+            rules.snp_density.output.weights,
+            group="DE1",
+            subgroup=group_to_subgroups["DE1"],
+        ),
+    output:
+        png="results/paper_figures/subgroups_linkage_DE1.png",
+        pdf="results/paper_figures/subgroups_linkage_DE1.pdf",
+    shell:
+        """
+        python scripts/plot_subgroups.py -o {output.png} -p {output.pdf} -g {input.group_linkage} -s {input.group_weights} -c {input.core_genome} -l {input.linkage} -w {input.weights}
+        """
+
+
+# processes the core genome in the multiple haplotype regions, so that the linkage disequilbrium analysis
+#   will only consider SNPs which are deviations from the haplotype consensus sequences
+rule process_core_genome:
+    input:
+        core_genome="results/groups/{group}/{group}_core/{group}_core_genome.fa",
+    params:
+        start=lambda w: process_start[w.group],
+        end=lambda w: process_end[w.group],
+        n=lambda w: process_n[w.group],
+    output:
+        "results/groups/{group}/{group}_core/{group}_processed/{group}_processed_core_genome.fa",
+    shell:
+        """
+        python scripts/process_core_genome.py -o {output} -i {input} -s {params.start} -e {params.end} -n {params.n}
+        """
+
+
+# calculate the SNP density at each position in core genome alignment, which is used to
+#   weight the linkage disequilibrium analysis
+rule snp_density_processed:
+    input:
+        rules.process_core_genome.output,
+    output:
+        weights="results/groups/{group}/{group}_core/{group}_processed/{group}_processed_snp_density.json",
+        fig="results/groups/{group}/{group}_core/{group}_processed/{group}_processed_snp_density.png",
+    shell:
+        """
+        python scripts/snp_density_processed.py -o {output.weights} -f {output.fig} -i {input}
+        """
+
+
+# calculates the linkage disequilbirium for each pair of SNPs in core genome
+rule process_linkage_disequilibrium:
+    input:
+        core_genome=rules.process_core_genome.output,
+        positions="results/groups/{group}/{group}_core/{group}_position_pham.tsv",
+    output:
+        "results/groups/{group}/{group}_core/{group}_processed/{group}_processed_linkage.feather",
+    shell:
+        """
+        python scripts/linkage_disequilibrium_processed.py -o {output} -i {input.core_genome} -p {input.positions}
+        """
+
+
+# plots the distribution of regions of high linkage across the core genome alignment
+rule linkage_distribution_processed:
+    input:
+        linkage=rules.process_linkage_disequilibrium.output,
+        core_genome=rules.process_core_genome.output,
+    output:
+        "results/groups/{group}/{group}_core/{group}_processed/{group}_processed_linkage_distribution.png",
+    shell:
+        """
+        python scripts/linkage_distribution.py -o {output} -l {input.linkage} -c {input.core_genome}
+        """
+
+
+# plot the linkage disequilibrium as a function of core genome distance
+rule plot_linkage_disequilibrium_processed:
+    input:
+        linkage="results/groups/{group}/{group}_core/{group}_linkage.feather",
+        weights="results/groups/{group}/{group}_core/{group}_snp_density.json",
+        linkage_processed=rules.process_linkage_disequilibrium.output,
+        weights_processed=rules.snp_density_processed.output.weights,
+    output:
+        png="results/groups/{group}/{group}_core/{group}_processed/{group}_processed_linkage.png",
+        pdf="results/groups/{group}/{group}_core/{group}_processed/{group}_processed_linkage.pdf",
+    shell:
+        """
+        python scripts/plot_processed_linkage.py -o {output.png} -p {output.pdf} -l {input.linkage} -w {input.weights} -d {input.linkage_processed} -s {input.weights_processed}
+        """
+
+
+rule plot_processed_E:
+    input:
+        png="results/groups/E/E_core/E_processed/E_processed_linkage.png",
+        pdf="results/groups/E/E_core/E_processed/E_processed_linkage.pdf",
+    output:
+        png="results/paper_figures/linkage_processed_E.png",
+        pdf="results/paper_figures/linkage_processed_E.pdf",
+    shell:
+        """
+        cp {input.png} {output.png}
+        cp {input.pdf} {output.pdf}
+        """
+
+
+# runs everything up to the linkage analysis
+rule all_except_linkage:
+    input:
+        [all_subgroups(group) for group in all_groups],
+        expand(rules.snp_density_processed.output, group=process_groups),
+
+
+# runs the linkage disequilibrium analyses. This needs to be done on only one core to avoid over-use of memory
+rule linkage:
+    input:
+        [plot_all_subgroups(group) for group in all_groups],
+        expand(rules.plot_linkage_disequilibrium_processed.output, group=process_groups),
+        expand(rules.linkage_distribution_processed.output, group=process_groups),
+        rules.plot_subgroups_DE1.output,
+        rules.plot_processed_E.output,

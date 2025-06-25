@@ -1,0 +1,11 @@
+phage_ids_to_names: "data/name_ID.json"
+
+group_info: "data/group_info.json"
+
+group_to_lifestyle: "config/cluster_to_lifestyle.tsv"
+
+group_core: "config/group_core_syntenic.json"
+
+group_phages: "config/group_phages_syntenic.json"
+
+nonsyntenic_groups: "config/nonsyntenic_groups.json"

@@ -1,0 +1,21 @@
+phage_ids_to_names: "data/name_ID.json"
+
+group_info: "config/new_group_info.json"
+
+group_phams: "config/group_phams.json"
+
+group_core: "config/core_phams.json"
+
+groups_to_process: "config/groups_to_process.json"
+
+groups_to_subgroup: "config/groups_to_subgroup.json"
+
+group_ld_info: "config/test.json"
+
+group_to_lifestyle: "config/cluster_to_lifestyle.tsv"
+
+new_group_info: "config/new_group_info_new.json"
+
+new_group_core: "config/core_phams_new.json"
+
+new_group_phams: "config/group_phams_new.json"

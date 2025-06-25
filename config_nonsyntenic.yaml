@@ -1,0 +1,5 @@
+phage_ids_to_names: "data/name_ID.json"
+
+group_info: "data/group_info.json"
+
+group_to_lifestyle: "config/cluster_to_lifestyle.tsv"

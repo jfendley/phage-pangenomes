@@ -1,0 +1,762 @@
+"""
+This pipeline completes the accessory and linkage disequilibrium analyses.
+    It creates Figures 4, 5, 6, S2, S3, S4, S5, S6, S8, S9, S10, S11, as well as the
+    config files necessary for the next pipeline.
+
+Author: Jemma M. Fendley
+"""
+
+import json
+
+
+configfile: "config_syntenic.yaml"
+
+
+wildcard_constraints:
+    pham_ID="\d+",
+
+
+# load the phage GenBank accession ID to database name dictionary
+with open(config["phage_ids_to_names"]) as f:
+    phage_name = json.load(f)
+
+# load the dictionary of groups to their type (e.g. subcluster)
+with open(config["group_info"]) as f:
+    group_info = json.load(f)
+group_type = {x["name"]: x["type"] for x in group_info if len(x["phage_list"]) > 1}
+
+# load the group to list of phages dictionary, and extract the lists of all the groups and all the phages
+with open(config["group_phages"]) as f:
+    group_phages = json.load(f)
+all_groups = list(group_phages.keys())
+all_phages = [x for y in list(group_phages.values()) for x in y]
+
+
+# load the group to its core phams dictinary
+with open(config["group_core"]) as f:
+    group_core = json.load(f)
+
+# extract the list of nonsyntenic and cyclic groups
+with open(config["nonsyntenic_groups"]) as f:
+    synteny_info = json.load(f)
+nonsyntenic_groups, cyclic_groups = [
+    x["name"]
+    for x in synteny_info["nonsyntenic_groups"]
+    if x["synteny"] == "nonsyntenic"
+], [x["name"] for x in synteny_info["nonsyntenic_groups"] if x["synteny"] == "cyclic"]
+
+# create a dictionary of cyclic groups to their nonsyntenic phages
+cyclic_nonsyntenic_phages = {
+    x["name"]: x["nonsyntenic_phages"]
+    for x in synteny_info["nonsyntenic_groups"]
+    if x["synteny"] == "cyclic"
+}
+
+# create a dictionary of groups to their synteny type
+group_synteny = {
+    x: (
+        "cyclic"
+        if x in cyclic_groups
+        else "nonsyntenic" if x in nonsyntenic_groups else "syntenic"
+    )
+    for x in all_groups
+}
+
+
+# builds a basic JSON with phams (nodes), edges, and paths (genomes) in the group
+# This is the basis of the pangenome graph.
+# For the nonsyntenic groups, we can just create the JSON again with a new list of phages
+rule build_group_json:
+    input:
+        phages=lambda w: expand(
+            "data/phages/{ID}/{ID}_genes.json", ID=group_phages[w.group]
+        ),
+    params:
+        type=lambda w: group_type[w.group],
+        dict=config["phage_ids_to_names"],
+    output:
+        "results/groups/{group}/{group}_syntenic.json",
+    shell:
+        """
+        python scripts/build_group.py -o {output} -t {params.type} -d {params.dict} -p {input.phages}
+        """
+
+
+# re-builds the group JSON for the cyclic groups by cyclically permuting the paths of a few phages
+rule build_group_json_cyclic:
+    input:
+        original_json="results/groups/{group}/{group}_graph.json",
+        nonsyntenic_info=config["nonsyntenic_groups"],
+    params:
+        synteny=lambda w: group_synteny[w.group],
+    output:
+        "results/groups/{group}/{group}_permuted.json",
+    shell:
+        """
+        python scripts/build_group_cyclic.py -o {output} -i {input.original_json} -n {input.nonsyntenic_info} -s {params.synteny}
+        """
+
+
+def group_json(group):
+    """
+    Returns the correct file that contains the group JSON
+    """
+    if group in nonsyntenic_groups:
+        return expand(rules.build_group_json.output, group=group)
+    elif group in cyclic_groups:
+        return expand(rules.build_group_json_cyclic.output, group=group)
+    else:
+        # can use the group JSON created in the previous snakemake workflow
+        return "results/groups/" + group + "/" + group + "_graph.json"
+
+
+# returns a dictionary with accessory pham locations relative to the core phams
+rule accessory_pham_locations:
+    input:
+        group_json=lambda w: group_json(w.group),
+    params:
+        duplicate="No",  #whether or not to include phams that appear multiple times in a phage genome
+        core_phams=lambda w: group_core[w.group],
+    output:
+        "results/groups/{group}/{group}_accessory/{group}_locations.json",
+    shell:
+        """
+        python scripts/accessory_locations.py -o {output} -i {input.group_json} -d {params.duplicate} -c {params.core_phams} 
+        """
+
+
+# returns a dictionary with accessory pham locations relative to the core phams
+rule all_accessory_pham_locations:
+    input:
+        group_json=lambda w: group_json(w.group),
+    params:
+        duplicate="Yes",  #whether or not to include phams that appear multiple times in a phage genome
+        core_phams=lambda w: group_core[w.group],
+    output:
+        "results/groups/{group}/{group}_accessory/{group}_locations_all.json",
+    shell:
+        """
+        python scripts/accessory_locations.py -o {output} -i {input.group_json} -d {params.duplicate} -c {params.core_phams} 
+        """
+
+
+# plots the accessory localization figures for the main text
+rule accessory_plots:
+    input:
+        groups=expand(rules.all_accessory_pham_locations.output, group=all_groups),
+        EE_json=group_json("EE"),
+        core=config["group_core"],
+    output:
+        main="results/paper_figures/accessory_localization.png",
+        main_svg="results/paper_figures/accessory_localization.svg",
+    shell:
+        """
+        python scripts/plot_accessory.py -o {output.main} -s {output.main_svg} -e {input.EE_json} -c {input.core} -g {input.groups}
+        """
+
+
+# plots the accessory localization figures for the SI
+rule accessory_plots_SI:
+    input:
+        groups=expand(rules.all_accessory_pham_locations.output, group=all_groups),
+        core=config["group_core"],
+    output:
+        SI="results/paper_figures/accessory_localization_SI.png",
+        SI_pdf="results/paper_figures/accessory_localization_SI.pdf",
+    shell:
+        """
+        python scripts/plot_accessory_entropy.py -o {output.SI} -p {output.SI_pdf} -c {input.core} -g {input.groups}
+        """
+
+
+# calculate the pairwise synteny of accessory phams
+rule accessory_synteny:
+    input:
+        group_json=lambda w: group_json(w.group),
+        accessory_locations=rules.accessory_pham_locations.output,
+    params:
+        core_phams=lambda w: group_core[w.group],
+    output:
+        temp("results/groups/{group}/{group}_accessory/{group}_synteny.tsv"),
+    shell:
+        """
+        python scripts/accessory_synteny.py -o {output} -g {input.group_json} -a {input.accessory_locations} -c {params.core_phams}
+        """
+
+
+# collate all of the accessory synteny information
+rule accessory_synteny_all:
+    input:
+        expand(rules.accessory_synteny.output, group=all_groups),
+    output:
+        "results/all_groups_files/accessory_synteny.tsv",
+    shell:
+        """
+        head -n 1 {input[0]} > {output} && tail -n+2 -q {input} >> {output}
+        """
+
+
+# plot the accessory synteny figures
+rule accessory_synteny_plots:
+    input:
+        rules.accessory_synteny_all.output,
+    output:
+        png="results/paper_figures/accessory_synteny.png",
+        pdf="results/paper_figures/accessory_synteny.pdf",
+    shell:
+        """
+        python scripts/plot_accessory_synteny.py -o {output.png} -p {output.pdf} -i {input}
+        """
+
+
+# compiile all of the genes into one file for DefenseFinder input
+rule create_all_genes_fasta:
+    input:
+        phages=lambda w: expand("data/phages/{ID}/{ID}_genes.json", ID=all_phages),
+    output:
+        "results/all_groups_files/all_genes.faa",
+    shell:
+        """
+        python scripts/compile_all_genes.py -o {output} -p {input.phages}
+        """
+
+
+# run DefenseFinder (including AntiDefense)
+rule run_DefenseFinder:
+    input:
+        rules.create_all_genes_fasta.output,
+    output:
+        folder=directory("results/defense_finder"),
+        gene_hits="results/defense_finder/all_genes_defense_finder_genes.tsv",
+    shell:
+        """
+        defense-finder run -o {output.folder} -a {input}
+        """
+
+
+# process the output of DefenseFinder with respect top hams
+rule process_DefenseFinder:
+    input:
+        genes=rules.create_all_genes_fasta.output,
+        defense=rules.run_DefenseFinder.output.gene_hits,
+    output:
+        "results/defense_finder/pham_to_defense.tsv",
+    shell:
+        """
+        python scripts/process_defense.py -o {output} -g {input.genes} -d {input.defense}
+        """
+
+
+# create a table with the functions of all the phams in the group
+rule pham_functions:
+    input:
+        phage_files=lambda w: expand(
+            "data/phages/{ID}/{ID}_genes.json", ID=group_phages[w.group]
+        ),
+        defense=rules.process_DefenseFinder.output,
+        accessory_locations=rules.all_accessory_pham_locations.output,
+    params:
+        core_phams=lambda w: group_core[w.group],
+    output:
+        temp("results/groups/{group}/{group}_pham_functions_hotspots.tsv"),
+    shell:
+        """
+        python scripts/pham_functions.py -o {output} -d {input.defense} -a {input.accessory_locations} -c {params.core_phams} -p {input.phage_files}
+        """
+
+
+# collate all of the functions across all of the groups
+rule all_phams_functions:
+    input:
+        expand(rules.pham_functions.output, group=all_groups),
+    output:
+        "results/all_groups_files/pham_functions_hotspots.tsv",
+    shell:
+        """
+        head -n 1 {input[0]} > {output} && tail -n+2 -q {input} >> {output}
+        """
+
+
+# plot the hotspot pham functions figure
+rule pham_function_plots:
+    input:
+        rules.all_phams_functions.output,
+    output:
+        png="results/paper_figures/function_enrichment_hotspots.png",
+        pdf="results/paper_figures/function_enrichment_hotspots.pdf",
+    shell:
+        """
+        python scripts/plot_pham_functions.py -o {output.png} -p {output.pdf} -i {input}
+        """
+
+
+# creates a fasta file contaning all the amino acid sequences of a pham in a given group
+rule create_fasta:
+    input:
+        lambda w: expand("data/phages/{ID}/{ID}_genes.json", ID=group_phages[w.group]),
+    output:
+        temp("results/groups/{group}/{group}_phams/{pham_ID}.fa"),
+    shell:
+        """
+        rm -f {output}
+        python scripts/create_fasta.py -o {output} -p {wildcards.pham_ID} -l {input}
+        """
+
+
+# aligns the amino acid fasta file
+rule align_fasta:
+    input:
+        rules.create_fasta.output,
+    output:
+        temp("results/groups/{group}/{group}_phams/{pham_ID}.fa.align"),
+    shell:
+        """
+        mafft {input} > {output}
+        """
+
+
+# extracts the dna alignment from the amino acid alignment
+rule get_dna_alignment:
+    input:
+        phages=lambda w: expand("data/phages/{ID}/{ID}.gbk", ID=group_phages[w.group]),
+        aln=lambda w: expand(rules.align_fasta.output, group=w.group, pham_ID=w.pham_ID),
+    output:
+        "results/groups/{group}/{group}_phams/{pham_ID}_dna_syntenic.fa.align",
+    shell:
+        """
+        rm -f {output}
+        python scripts/convert_to_dna.py -i {input.aln} -o {output} -g {input.phages}
+        """
+
+
+def core_dna_alignments(group):
+    """
+    Returns all of the DNA alignments of core phams
+    """
+    if group in nonsyntenic_groups:
+        return expand(
+            rules.get_dna_alignment.output, group=group, pham_ID=group_core[group]
+        )
+    else:
+        # can use all of the alignments in the previous snakemake workflow for syntenic and cyclic groups
+        return [
+            "results/groups/" + group + "/" + group + "_phams/" + pham + "_dna.fa.align"
+            for pham in group_core[group]
+        ]
+
+
+# creates the core genome alignment
+rule core_genome:
+    input:
+        alignments=lambda w: core_dna_alignments(w.group),
+        group_info=lambda w: group_json(w.group),
+    params:
+        core=lambda w: group_core[w.group],
+    output:
+        fasta="results/groups/{group}/{group}_core/{group}_core_genome.fa",
+        starts="results/groups/{group}/{group}_core/{group}_core_pham_starts.json",
+        strands = "results/groups/{group}/{group}_core/{group}_core_pham_strands.json"
+    shell:
+        """
+        python scripts/core_genome.py -g {input.group_info} -o {output.fasta} -s {output.starts} -r {output.strands} -c {params.core} -a {input.alignments}
+        """
+
+
+# creates a table of core genome position to which core pham it belongs to
+#   it also record which positions in the core genome alignment correspond to overlapping phams
+rule core_position_to_pham:
+    input:
+        phages=lambda w: expand("data/phages/{ID}/{ID}.gbk", ID=group_phages[w.group]),
+        alignments=lambda w: core_dna_alignments(w.group),
+        core_genome=rules.core_genome.output.fasta,
+        pham_starts=rules.core_genome.output.starts,
+        strands=rules.core_genome.output.strands,
+        nonsyntenic_info=config["nonsyntenic_groups"],
+    output:
+        "results/groups/{group}/{group}_core/{group}_position_pham.tsv",
+    shell:
+        """
+        python scripts/core_position_pham.py -o {output} -i {input.core_genome} -s {input.pham_starts} -r {input.strands} -n {input.nonsyntenic_info} -a {input.alignments} -p {input.phages}
+        """
+
+
+# investigate overlapping phams and how it affects accessory localization
+rule overlap:
+    input:
+        accessory=expand(rules.all_accessory_pham_locations.output, group=all_groups),
+        core=expand(rules.core_position_to_pham.output, group=all_groups),
+    params:
+        cyclic=cyclic_groups,
+    output:
+        png="results/paper_figures/core_overlap.png",
+        pdf="results/paper_figures/core_overlap.pdf",
+    shell:
+        """
+        python scripts/overlap.py -o {output.png} -p {output.pdf} -c {params.cyclic} -i {input.core} -a {input.accessory}
+        """
+
+
+# investigate the distance between compatible (4-allele test) SNPs in the core genome alignment
+rule snp_compatibility:
+    input:
+        core_genome=rules.core_genome.output.fasta,
+        positions=rules.core_position_to_pham.output,
+    output:
+        fig="results/groups/{group}/{group}_core/{group}_snp_compatibility.png",
+        data=temp("results/groups/{group}/{group}_core/{group}_snp_compatibility.tsv"),
+    shell:
+        """
+        python scripts/snp_compatibility.py -o {output.data} -f {output.fig} -i {input.core_genome} -p {input.positions}
+        """
+
+
+# combine all of the snp compatibility tables into one table
+rule all_snp_compatibility:
+    input:
+        expand(rules.snp_compatibility.output.data, group=all_groups),
+    output:
+        "results/all_groups_files/snp_compatibility.tsv",
+    shell:
+        """
+        head -n 1 {input[0]} > {output} && tail -n+2 -q {input} >> {output}
+        """
+
+
+# plot a summary figure of the snp compatibility analysis
+rule plot_snp_compatibility:
+    input:
+        rules.all_snp_compatibility.output,
+    output:
+        png="results/paper_figures/snp_compatibility.png",
+        pdf="results/paper_figures/snp_compatibility.pdf",
+    shell:
+        """
+        python scripts/plot_snp_compatibility.py -o {output.png} -p {output.pdf} -i {input}
+        """
+
+
+# analysis between pairs of closely related phages to estimate recombination length
+rule pairwise_snp_analysis:
+    input:
+        rules.core_genome.output.fasta,
+    output:
+        "results/groups/{group}/{group}_core/{group}_pairwise.tsv",
+    shell:
+        """
+        python scripts/pairwise_snp_analysis.py -o {output} -c {input}
+        """
+
+
+# plots the pairwise snp analysis for one pair of phages per group
+rule plot_pairwise:
+    input:
+        core_genome=rules.core_genome.output.fasta,
+        starts=rules.core_genome.output.starts,
+        table=rules.pairwise_snp_analysis.output,
+    output:
+        png="results/groups/{group}/{group}_core/{group}_pairwise_example.png",
+        pdf="results/groups/{group}/{group}_core/{group}_pairwise_example.pdf",
+    shell:
+        """
+        python scripts/plot_pairwise_example.py -o {output.png} -p {output.pdf} -s {input.starts} -c {input.core_genome} -t {input.table}
+        """
+
+
+# plots the example pairwise snp analysis for the paper
+rule plot_pairwise_example:
+    input:
+        png="results/groups/A1/A1_core/A1_pairwise_example.png",
+        pdf="results/groups/A1/A1_core/A1_pairwise_example.pdf",
+    output:
+        png="results/paper_figures/pairwise_example_A1.png",
+        pdf="results/paper_figures/pairwise_example_A1.pdf",
+    shell:
+        """
+        cp {input.png} {output.png}
+        cp {input.pdf} {output.pdf}
+        """
+
+
+# compile all of the pairwise snp analysis statistics
+rule all_groups_pairwise_statistics:
+    input:
+        expand(rules.pairwise_snp_analysis.output, group=all_groups),
+    output:
+        "results/all_groups_files/pairwise.tsv",
+    shell:
+        """
+        head -n 1 {input[0]} > {output} && tail -n+2 -q {input} >> {output}
+        """
+
+
+# plot the pairwise snp analysis summary statistics
+rule plot_pairwise_snp_analysis:
+    input:
+        statistics=rules.all_groups_pairwise_statistics.output,
+        groups=[group_json(x) for x in all_groups],
+    output:
+        png="results/paper_figures/pairwise.png",
+        pdf="results/paper_figures/pairwise.pdf",
+    shell:
+        """
+        python scripts/plot_pairwise.py -o {output.png} -p {output.pdf} -s {input.statistics} -g {input.groups}
+        """
+
+
+# plot the core hamming distance matrix
+rule distance_matrix:
+    input:
+        core_genome=rules.core_genome.output.fasta,
+        group_json=lambda w: group_json(w.group),
+    output:
+        fig="results/groups/{group}/{group}_distance_matrix.png",
+        data="results/groups/{group}/{group}_distance.tsv",
+        subgroups="results/groups/{group}/{group}_core/{group}_subgroups.json",
+    shell:
+        """
+        python scripts/plot_distance_matrix.py -o {output.data} -f {output.fig} -s {output.subgroups} -c {input.core_genome} -g {input.group_json}
+        """
+
+
+# creates config files with subgroup information for use in next pipeline
+rule create_subgroups_config:
+    input:
+        expand(rules.distance_matrix.output.subgroups, group=all_groups),
+    output:
+        subgroup_phages="config_subgroups/subgroup_phages.json",
+        subgroup_group="config_subgroups/subgroup_to_group.json",
+    shell:
+        """
+        python scripts/create_subgroups_config.py -o {output.subgroup_group} -p {output.subgroup_phages} -g {input}
+        """
+
+
+# combine all of hamnming statistics
+rule distance_statistics:
+    input:
+        expand(rules.distance_matrix.output.data, group=all_groups),
+    output:
+        "results/all_groups_files/distance_statistics.tsv",
+    shell:
+        """
+        head -n 1 {input[0]} > {output} && tail -n+2 -q {input} >> {output}
+        """
+
+
+# creates a simple plot with the distribution of SNPs across the core genome
+rule snp_distribution:
+    input:
+        rules.core_genome.output.fasta,
+    output:
+        "results/groups/{group}/{group}_core/{group}_snp_distribution.png",
+    shell:
+        """
+        python scripts/plot_snp_distribution.py -o {output} -i {input}
+        """
+
+
+# checks the percentage of SNP sites which are biallelic
+rule check_biallelic:
+    input:
+        groups=expand(rules.core_genome.output.fasta, group=all_groups),
+    output:
+        "results/all_groups_figures/biallelic.png",
+    shell:
+        """
+        python scripts/biallelic.py -o {output} -g {input.groups}
+        """
+
+
+# calculate the SNP density at each position in core genome alignment, which is used to
+#   weight the linkage disequilibrium analysis
+rule snp_density:
+    input:
+        rules.core_genome.output.fasta,
+    output:
+        weights="results/groups/{group}/{group}_core/{group}_snp_density.json",
+        fig="results/groups/{group}/{group}_core/{group}_snp_density.png",
+    shell:
+        """
+        python scripts/snp_density.py -o {output.weights} -f {output.fig} -i {input}
+        """
+
+
+# creates a dictionary of core position to position in a reference genome
+rule reference_core_positions:
+    input:
+        reference_phage="data/phages/{ID}/{ID}.gbk",
+        core_genome=rules.core_genome.output.fasta,
+        pham_starts=rules.core_genome.output.starts,
+        strands=rules.core_genome.output.strands,
+    output:
+        "results/groups/{group}/{group}_core/{group}_positions_{ID}.json",
+    shell:
+        """
+        python scripts/reference_positions.py -o {output} -r {input.reference_phage} -c {input.core_genome} -s {input.pham_starts} -d {input.strands}
+        """
+
+
+def get_reference_positions(group, number):
+    """
+    returns the files containing the dictionaries of core genome alignment location to reference phage location,
+        for a specified number of reference phages
+    """
+    if group_synteny[group] == "cyclic":
+        syntenic_phages = [
+            x for x in group_phages[group] if x not in cyclic_nonsyntenic_phages[group]
+        ]
+    else:
+        syntenic_phages = group_phages[group]
+    return expand(
+        rules.reference_core_positions.output,
+        group=group,
+        ID=syntenic_phages[:number],
+    )
+
+
+# calculates the linkage disequilbirium for each pair of SNPs in core genome
+rule linkage_disequilibrium:
+    input:
+        core_genome=rules.core_genome.output.fasta,
+        positions=rules.core_position_to_pham.output,
+    output:
+        "results/groups/{group}/{group}_core/{group}_linkage.feather",
+    shell:
+        """
+        python scripts/linkage_disequilibrium.py -o {output} -i {input.core_genome} -p {input.positions}
+        """
+
+
+# plots the distribution of regions of high linkage across the core genome alignment
+rule linkage_distribution:
+    input:
+        linkage=rules.linkage_disequilibrium.output,
+        core_genome=rules.core_genome.output.fasta,
+    output:
+        "results/groups/{group}/{group}_core/{group}_linkage_distribution.png",
+    shell:
+        """
+        python scripts/linkage_distribution.py -o {output} -l {input.linkage} -c {input.core_genome}
+        """
+
+
+# plot the linkage disequilibrium as a function of core genome distance
+rule plot_linkage_disequilibrium:
+    input:
+        linkage=rules.linkage_disequilibrium.output,
+        reference_phage=lambda w: get_reference_positions(w.group, 1),
+        weights=rules.snp_density.output.weights,
+    output:
+        fig="results/groups/{group}/{group}_core/{group}_linkage.png",
+        data="results/groups/{group}/{group}_core/{group}_linkage_statistics.tsv",
+    shell:
+        """
+        python scripts/plot_linkage.py -o {output.fig} -s {output.data} -l {input.linkage} -r {input.reference_phage} -w {input.weights}
+        """
+
+
+# compiles all of the linkage disequilibrium statistics across all the gruops
+rule all_linkage_information:
+    input:
+        expand(rules.plot_linkage_disequilibrium.output.data, group=all_groups),
+    output:
+        "results/all_groups_files/linkage_statistics.tsv",
+    shell:
+        """
+        head -n 1 {input[0]} > {output} && tail -n+2 -q {input} >> {output}
+        """
+
+
+paper_groups = ["A11", "E", "DE1"]
+
+
+# plots the two main linkage figures in the paper
+rule linkage_paper_figures:
+    input:
+        linkage=expand(rules.linkage_disequilibrium.output, group=paper_groups),
+        weights=expand(rules.snp_density.output.weights, group=paper_groups),
+        core_genome=expand(rules.core_genome.output.fasta, group=paper_groups),
+    params:
+        groups=paper_groups,
+    output:
+        png="results/paper_figures/linkage.png",
+        pdf="results/paper_figures/linkage.pdf",
+        structure_png="results/paper_figures/linkage_structure.png",
+        structure_pdf="results/paper_figures/linkage_structure.pdf",
+    shell:
+        """
+        python scripts/plot_linkage_paper_figures.py -o {output.png} -p {output.pdf} -s {output.structure_png} -f {output.structure_pdf} -g {params.groups} -l {input.linkage} -w {input.weights} -c {input.core_genome}
+        """
+
+
+# plots the effect of the weighting on linkage
+rule plot_linkage_weights:
+    input:
+        linkage=rules.linkage_disequilibrium.output,
+        reference_phage=lambda w: get_reference_positions(w.group, 1),
+        weights=rules.snp_density.output.weights,
+    output:
+        png="results/groups/{group}/{group}_core/{group}_linkage_weights.png",
+        pdf="results/groups/{group}/{group}_core/{group}_linkage_weights.pdf",
+    shell:
+        """
+        python scripts/plot_linkage_weights.py -o {output.png} -p {output.pdf} -l {input.linkage} -r {input.reference_phage} -w {input.weights}
+        """
+
+
+# plots the example figure for the SI on the effect of weights
+rule plot_example_weights:
+    input:
+        png="results/groups/A11/A11_core/A11_linkage_weights.png",
+        pdf="results/groups/A11/A11_core/A11_linkage_weights.pdf",
+    output:
+        png="results/paper_figures/linkage_weights_A11.png",
+        pdf="results/paper_figures/linkage_weights_A11.pdf",
+    shell:
+        """
+        cp {input.png} {output.png}
+        cp {input.pdf} {output.pdf}
+        """
+
+
+# plots the contiuum of residual linkage across all of the groups
+rule residual_linkage:
+    input:
+        statistics=rules.distance_statistics.output,
+        haplotype_groups="config/groups_to_process.json",
+        linkage_information=rules.all_linkage_information.output,
+    output:
+        png="results/paper_figures/residual_linkage.png",
+        pdf="results/paper_figures/residual_linkage.pdf",
+    shell:
+        """
+        python scripts/residual_linkage.py -o {output.png} -p {output.pdf} -s {input.statistics} -g {input.haplotype_groups} -l {input.linkage_information} 
+        """
+
+
+# runs everything up to linkage disequilibrium
+rule all_except_linkage:
+    input:
+        [get_reference_positions(group, 1) for group in all_groups],
+        expand(rules.snp_density.output, group=all_groups),
+        rules.check_biallelic.output,
+        expand(rules.snp_distribution.output, group=all_groups),
+        rules.create_subgroups_config.output,
+        rules.plot_pairwise_snp_analysis.output,
+        rules.plot_pairwise_example.output,
+        rules.plot_snp_compatibility.output,
+        rules.overlap.output,
+        rules.pham_function_plots.output,
+        rules.accessory_synteny_plots.output,
+        rules.accessory_plots_SI.output,
+        rules.accessory_plots.output,
+
+
+# runs the linkage disequilibrium analyses. This needs to be done on only one core to avoid over-use of memory
+rule linkage:
+    input:
+        rules.residual_linkage.output,
+        rules.plot_example_weights.output,
+        rules.linkage_paper_figures.output,
+        rules.all_linkage_information.output,
+        expand(rules.linkage_distribution.output, group=all_groups),

@@ -1,0 +1,345 @@
+"""
+This pipeline reports basic statistics on each group, including checking the synteny. 
+    This pipeline will create Figures 1, 3, and SI1 in the paper, as well as the tables in the SI
+    It also creates the neccessory config file for the next pipeline, as well as the necessary .gfa
+    files to input into Bandage to create Figure 2. 
+
+Author: Jemma M. Fendley
+"""
+
+import json
+
+
+wildcard_constraints:
+    pham_ID="\d+",
+
+
+configfile: "config_nonsyntenic.yaml"
+
+
+with open(config["phage_ids_to_names"]) as f:
+    # The dictionary of phage accession IDs to their corresponding name
+    phage_name = json.load(f)
+
+with open(config["group_info"]) as f:
+    group_info = json.load(f)
+    group_type = {x["name"]: x["type"] for x in group_info if len(x["phage_list"]) > 1}
+
+    # This step filters out groups that have fewer than 10 phages, and the "Singeleton"
+    #   group, which is the phages that were not clustered into a cluster. This also excludes
+    #   "super clusters", which are just clusters that have already been divided into subclusters.
+    #   We thus neglect any phages that were not sorted into a subcluster, and don't consider
+    #   e.g. cluster A, but only subgroups A1, A2, etc. on their own.
+    all_groups = [
+        x["name"]
+        for x in group_info
+        if len(x["phage_list"]) >= 10
+        and x["type"] != "super_cluster"
+        and x["name"] != "Singleton"
+    ]
+
+
+# This step is essential and removes phages that the data in the database do not
+#   match the data in GenBank and creates the group to phages dictionary
+checkpoint filter_group_phages:
+    input:
+        config["group_info"],
+    output:
+        "config_nonsyntenic/group_phages_nonsyntenic.json",
+    shell:
+        """
+        python scripts/group_phages.py -o {output} -i {input}
+        """
+
+
+def group_phages():
+    """
+    extracts the group to phages dictionary from the file
+    """
+    ck_output = checkpoints.filter_group_phages.get(**{}).output[0]
+    with open(ck_output, "r") as f:
+        group_phages_dict = json.load(f)
+    return group_phages_dict
+
+
+# builds a basic JSON with phams (nodes), edges, and paths (genomes) in the group
+# This is the basis of the pangenome graph.
+rule build_group_json:
+    input:
+        phages=lambda w: expand(
+            "data/phages/{ID}/{ID}_genes.json", ID=group_phages()[w.group]
+        ),
+    params:
+        type=lambda w: group_type[w.group],
+        dict=config["phage_ids_to_names"],
+    output:
+        "results/groups/{group}/{group}_graph.json",
+    shell:
+        """
+        python scripts/build_group.py -o {output} -t {params.type} -d {params.dict} -p {input.phages}
+        """
+
+
+# counts the number of phams that appear multiple times in the same phage
+rule duplicate_phams:
+    input:
+        expand(rules.build_group_json.output, group=all_groups),
+    output:
+        "results/all_groups_files/duplicate_phams.tsv",
+    shell:
+        """
+        python scripts/count_duplicate_phams.py -o {output} -g {input}
+        """
+
+
+# create a dictionary of group to core phams (those present exactly once in each phage)
+checkpoint group_core:
+    input:
+        expand(rules.build_group_json.output, group=all_groups),
+    output:
+        "config_nonsyntenic/group_core_nonsyntenic.json",
+    shell:
+        """
+        python scripts/group_core.py -o {output} -g {input}
+        """
+
+
+def get_core_phams():
+    """
+    extracts the group to core phams dictionary from the file
+    """
+    ck_output = checkpoints.group_core.get(**{}).output[0]
+    with open(ck_output, "r") as f:
+        core_dict = json.load(f)
+    return core_dict
+
+
+# creates a fasta file contaning all the amino acid sequences of a pham in a given group
+rule create_fasta:
+    input:
+        lambda w: expand("data/phages/{ID}/{ID}_genes.json", ID=group_phages()[w.group]),
+    output:
+        temp("results/groups/{group}/{group}_phams/{pham_ID}.fa"),
+    shell:
+        """
+        rm -f {output}
+        python scripts/create_fasta.py -o {output} -p {wildcards.pham_ID} -l {input}
+        """
+
+
+# aligns the amino acid fasta file
+rule align_fasta:
+    input:
+        rules.create_fasta.output,
+    output:
+        temp("results/groups/{group}/{group}_phams/{pham_ID}.fa.align"),
+    shell:
+        """
+        mafft {input} > {output}
+        """
+
+
+# extracts the dna alignment from the amino acid alignment
+rule get_dna_alignment:
+    input:
+        phages=lambda w: expand("data/phages/{ID}/{ID}.gbk", ID=group_phages()[w.group]),
+        aln=lambda w: expand(rules.align_fasta.output, group=w.group, pham_ID=w.pham_ID),
+    output:
+        "results/groups/{group}/{group}_phams/{pham_ID}_dna.fa.align",
+    shell:
+        """
+        rm -f {output}
+        python scripts/convert_to_dna.py -i {input.aln} -o {output} -g {input.phages}
+        """
+
+
+# converts the JSON file to .gfa for visualisation purposes
+rule create_gfa:
+    input:
+        rules.build_group_json.output,
+    output:
+        "results/groups/{group}/{group}.gfa",
+    shell:
+        """
+        python scripts/create_gfa.py -i {input} -o {output}
+        """
+
+
+# visualized the pangenome graph in Bandage
+rule create_pangenome_graph:
+    input:
+        rules.create_gfa.output,
+    output:
+        "results/groups/{group}/{group}_pangraph.png",
+    shell:
+        """
+        Bandage image {input} {output} --colour depth
+        """
+
+
+# checks the synteny of the core genome in all of the groups
+rule core_synteny:
+    input:
+        expand(rules.build_group_json.output, group=all_groups),
+    output:
+        "config/nonsyntenic_groups.json",
+    shell:
+        """
+        python scripts/core_synteny.py -o {output} -g {input}
+        """
+
+
+# plots the paper figure that illustrates the core sytneny across the groups
+rule plot_core_synteny:
+    input:
+        rules.core_synteny.output,
+    output:
+        figure="results/paper_figures/core_synteny.png",
+        figure_svg="results/paper_figures/core_synteny.svg",
+    shell:
+        """
+        python scripts/plot_core_synteny.py -f {output.figure} -s {output.figure_svg} -i {input}
+        """
+
+
+# creates a file with some basic group info needed for downstream analysis
+rule summary_info:
+    input:
+        phages=lambda w: expand(
+            "data/phages/{ID}/{ID}_info.json", ID=group_phages()[w.group]
+        ),
+        group_json=rules.build_group_json.output,
+    output:
+        "results/groups/{group}/{group}_summary.json",
+    shell:
+        """
+        python scripts/summary.py -o {output} -g {input.group_json} -p {input.phages} 
+        """
+
+
+# calculates pairwise distance metrics for each phage pair in a group
+rule pairwise_metrics:
+    input:
+        summary=rules.summary_info.output,
+        phages=lambda w: expand(
+            "data/phages/{ID}/{ID}_genes.json", ID=group_phages()[w.group]
+        ),
+        group_json=rules.build_group_json.output,
+        core=lambda w: expand(
+            rules.get_dna_alignment.output,
+            group=w.group,
+            pham_ID=get_core_phams()[w.group],
+        ),
+    output:
+        "results/groups/{group}/{group}_pairwise_metrics.tsv",
+    shell:
+        """
+        python scripts/pairwise_metrics.py -o {output} -s {input.summary} -g {input.group_json} -p {input.phages} -c {input.core}
+        """
+
+
+# calculates the mean value of the distance metrics for all of the groups
+rule mean_pairwise_metrics:
+    input:
+        expand(rules.pairwise_metrics.output, group=all_groups),
+    output:
+        "results/all_groups_files/mean_pairwise_metrics.tsv",
+    shell:
+        """
+        python scripts/mean_pairwise_metrics.py -o {output} -g {input}
+        """
+
+
+# plots a paper figure that outlines the diversity of all of the groups
+rule diversity_figure:
+    input:
+        rules.mean_pairwise_metrics.output,
+    output:
+        figure="results/paper_figures/diversity.png",
+        figure_pdf="results/paper_figures/diversity.pdf",
+    shell:
+        """
+        python scripts/plot_diversity.py -o {output.figure} -p {output.figure_pdf} -i {input}
+        """
+
+
+# records the percent of each phage that is is genes (coding regions) and is core
+rule percent_core:
+    input:
+        summary=rules.summary_info.output,
+        phages=lambda w: expand(
+            "data/phages/{ID}/{ID}_genes.json", ID=group_phages()[w.group]
+        ),
+    output:
+        "results/groups/{group}/{group}_percent_core.tsv",
+    shell:
+        """
+        python scripts/percent_core.py -o {output} -s {input.summary} -p {input.phages}
+        """
+
+
+# compiles all of the individual group tables to create one
+rule all_groups_percent_core:
+    input:
+        tables=expand(rules.percent_core.output, group=all_groups),
+    output:
+        "results/all_groups_files/percent_core.tsv",
+    shell:
+        """
+        head -n 1 {input.tables[0]} > {output} && tail -n+2 -q {input.tables} >> {output}
+        """
+
+
+# creates a table with information of all of the groups
+rule all_groups_info:
+    input:
+        group_info_file=config["group_info"],
+        lifestyle=config["group_to_lifestyle"],
+        percent_core=rules.all_groups_percent_core.output,
+        mean_pairwise_metrics=rules.mean_pairwise_metrics.output,
+        groups=expand(rules.summary_info.output, group=all_groups),
+        nonsyntenic=rules.core_synteny.output,
+    output:
+        "results/all_groups_files/basic_group_info.tsv",
+    shell:
+        """
+        python scripts/all_groups_info.py -o {output} -i {input.group_info_file} -l {input.lifestyle} -c {input.percent_core} -m {input.mean_pairwise_metrics} -g {input.groups} -n {input.nonsyntenic}
+        """
+
+
+# creates a paper figure that displays many properties of all the groups
+rule summary_plots:
+    input:
+        rules.all_groups_info.output,
+    output:
+        figure="results/paper_figures/biology.png",
+        figure_pdf="results/paper_figures/biology.pdf",
+    shell:
+        """
+        python scripts/summary_plots.py -o {output.figure} -p {output.figure_pdf} -i {input}
+        """
+
+
+# creates the config files for downstream analysis of syntenic groups
+rule create_syntenic_config:
+    input:
+        groups=expand(rules.build_group_json.output, group=all_groups),
+        non_syntenic_info=rules.core_synteny.output,
+    output:
+        core="config/group_core_syntenic.json",
+        phages="config/group_phages_syntenic.json",
+    shell:
+        """
+        python scripts/create_syntenic_config.py -c {output.core} -p {output.phages} -n {input.non_syntenic_info} -g {input.groups}
+        """
+
+
+# run the entire pipeline
+rule all:
+    input:
+        rules.create_syntenic_config.output,
+        rules.summary_plots.output,
+        rules.diversity_figure.output,
+        rules.duplicate_phams.output,
+        expand(rules.create_pangenome_graph.output, group=all_groups),
+        rules.plot_core_synteny.output,
