@@ -7,6 +7,7 @@ unzip data.zip
 # create and activate the conda environment
 
 conda env create -f environment.yml
+source activate base 
 conda activate phage-pangenomes
 
 # run the pipeline that checks core synteny, and creates sytenic groups 
