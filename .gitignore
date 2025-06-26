@@ -1,0 +1,9 @@
+/results
+/data
+/data.zip
+/config/group_core_syntenic.json
+/config/group_phages_syntenic.json
+/config/nonsyntenic_groups.json
+/config_nonsyntenic
+/config_subgroups
+/scripts/__pycache__
