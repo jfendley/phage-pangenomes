@@ -6,6 +6,7 @@ Author: Jemma M. Fendley
 
 import matplotlib as mpl
 from cycler import cycler
+import shutil
 
 color_palette = [
     "#332288",
@@ -29,7 +30,7 @@ mpl.rcParams["legend.handlelength"] = 1
 mpl.rcParams["legend.title_fontsize"] = 10
 mpl.rcParams["xtick.labelsize"] = 10
 mpl.rcParams["ytick.labelsize"] = 10
-mpl.rcParams["text.usetex"] = True
+mpl.rcParams["text.usetex"] = True if shutil.which('latex') else False
 mpl.rcParams["font.family"] = "serif"
-mpl.rcParams["font.serif"] = "cm"
+mpl.rcParams["font.serif"] = "cm" if shutil.which('latex') else 'Liberation Serif'
 mpl.rcParams["text.latex.preamble"] = r"\usepackage{amsmath}"
