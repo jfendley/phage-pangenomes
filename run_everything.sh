@@ -9,6 +9,8 @@ unzip data.zip
 conda env create -f environment.yml
 source activate base 
 conda activate phage-pangenomes
+pip install mdmparis-defense-finder
+defense-finder update
 
 # run the pipeline that checks core synteny, and creates sytenic groups 
 #   the number of cores can be modified based on computing resources
