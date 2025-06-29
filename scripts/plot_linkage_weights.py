@@ -171,12 +171,21 @@ def plot_linkage_weights(linkage, reference, weights_file, output, output_pdf):
 
 # %%
 if __name__ == "__main__":
-    base = "/home/jemma/Projects/phagephams/analyzeData/results/"
-    linkage = base + "groups/A11/A11_core/A11_linkage.feather"
-    reference = base + "groups/A11/A11_core/A11_positions_MN703405.json"
-    weights = base + "groups/A11/A11_core/A11_snp_density.json"
 
-    output = base + "paper_figures/linkage_weights_A11.png"
-    output_pdf = base + "paper_figures/linkage_weights_A11.pdf"
+    parser = argparse.ArgumentParser(description="plot effects of weights on linkage")
+    parser.add_argument(
+        "-o", "--output", help="figure png file", type=str, required=True
+    )
+    parser.add_argument(
+        "-p", "--output_pdf", help="figure pdf file", type=str, required=True
+    )
+    parser.add_argument("-l", "--linkage", help="linkage file", type=str, required=True)
+    parser.add_argument(
+        "-r", "--reference", help="reference positions file", type=str, required=True
+    )
+    parser.add_argument("-w", "--weights", help="weights file", type=str, required=True)
+    args = parser.parse_args()
 
-    plot_linkage_weights(linkage, reference, weights, output, output_pdf)
+    plot_linkage_weights(
+        args.linkage, args.reference, args.weights, args.output, args.output_pdf
+    )
