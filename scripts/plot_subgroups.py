@@ -200,27 +200,43 @@ def plot_subgroups(output, output_pdf, core_genome, linkage_list, weights_list):
 
 if __name__ == "__main__":
 
-    base = "/home/jemma/Projects/phagephams/analyzeData/"
-    png = base + "results/paper_figures/subgroups_linkage_DE1.png"
-    pdf = base + "results/paper_figures/subgroups_linkage_DE1.pdf"
-    group_linkage = base + "results/groups/DE1/DE1_core/DE1_linkage.feather"
-    group_weights = base + "results/groups/DE1/DE1_core/DE1_snp_density.json"
-    core_genome = base + "results/groups/DE1/DE1_core/DE1_core_genome.fa"
-    subgroup_linkage = [
-        base + "results/groups/DE1/DE1_core/DE1_subgroups/DE1-" + x + "_linkage.feather"
-        for x in ["1", "2"]
-    ]
-    subgroup_weights = [
-        base
-        + "results/groups/DE1/DE1_core/DE1_subgroups/DE1-"
-        + x
-        + "_snp_density.json"
-        for x in ["1", "2"]
-    ]
+    parser = argparse.ArgumentParser(description="plot linkage of subgroups of DE1")
+    parser.add_argument(
+        "-o", "--output", help="figure png file", type=str, required=True
+    )
+    parser.add_argument(
+        "-p", "--output_pdf", help="figure pdf file", type=str, required=True
+    )
+    parser.add_argument(
+        "-g", "--group_linkage", help="group linkage file", type=str, required=True
+    )
+    parser.add_argument(
+        "-s", "--group_weights", help="group weights file", type=str, required=True
+    )
+    parser.add_argument(
+        "-c", "--core_genome", help="core genome file", type=str, required=True
+    )
+    parser.add_argument(
+        "-l",
+        "--linkage",
+        help="list of subgroup linkage files",
+        nargs="+",
+        required=True,
+    )
+    parser.add_argument(
+        "-w",
+        "--weights",
+        help="list of subgroup weight files",
+        nargs="+",
+        required=True,
+    )
+
+    args = parser.parse_args()
+
     plot_subgroups(
-        png,
-        pdf,
-        core_genome,
-        [group_linkage] + subgroup_linkage,
-        [group_weights] + subgroup_weights,
+        args.output,
+        args.output_pdf,
+        args.core_genome,
+        [args.group_linkage] + args.linkage,
+        [args.group_weights] + args.weights,
     )
