@@ -49,6 +49,7 @@ def main():
     df["distance"] = df["position2"] - df["position1"]
     df["weight"] = df["position1"].map(weights) * df["position2"].map(weights)
     df["codon_distance"] = df["distance"] // 3 + 1
+    df = df.drop(columns=["distance"])  # reduce memory
 
     # calculate the distance in the reference genome
     position1, position2 = phage + "_position1", phage + "_position2"
@@ -56,15 +57,15 @@ def main():
     df[position2] = df["position2"].map(reference)
     df["reference_distance"] = df[position2] - df[position1]
     df["reference_codon_distance"] = df["reference_distance"] // 3 + 1
+    df = df.drop(columns=["position1", "position2", position1, position2])
 
     # calculate the asymptotic value and the mean background random expectation
     end_df = df[df["codon_distance"] > 3000]
     if np.max(df["codon_distance"]) < 3000:
         end_df = df[df["codon_distance"] > 2500]
-        print(group_name)
-        print("THIS GROUP HAS NOT 3000 CODONS!!!!")
     asymptote = np.average(end_df["ld"], weights=end_df["weight"])
     background = np.average(df["bg_ld"], weights=df["weight"])
+    del end_df  # reduce memory
 
     # prepare the data for plotting
     data = df.groupby("codon_distance").apply(
@@ -75,6 +76,7 @@ def main():
         lambda x: np.average(x.bg_ld, weights=x.weight)
     )
     reference_df = df[df["reference_distance"] > 0]
+    del df  # reduce memory
     reference_data = reference_df.groupby("reference_codon_distance").apply(
         lambda x: np.average(x.ld, weights=x.weight)
     )
@@ -82,6 +84,7 @@ def main():
     reference_background = reference_df.groupby("reference_codon_distance").apply(
         lambda x: np.average(x.bg_ld, weights=x.weight)
     )
+    del reference_df  # reduce memory
 
     # initialize the plots
     fig, axes = plt.subplots(
