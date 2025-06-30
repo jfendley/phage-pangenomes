@@ -3,7 +3,7 @@ This pipeline reproduces the analysis in J. M. Fendley et. al: "Synteny and link
 
 To simply recreate the figures and all of the analysis using the data provided used simply run the exectuable:
 ```
-./run_everything.sh
+bash run_everything.sh
 ```
 Configured for 64GB memory and 20 cores, this will take approximately 15 hours. 
 
