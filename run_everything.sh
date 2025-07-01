@@ -1,6 +1,15 @@
 #!/bin/bash
 
-# unzip the data file (alternatively could download new data)
+
+# the following has been tested on 64GB RAM computers. Some of the 
+#   analyses (specifically the linkage disequilibrium analyses) require
+#   large amounts of memory. The code could be modified (e.g. delete no 
+#   longer used variables, calculate linkage only at short distances) to 
+#   reduce memory usage if needed.
+
+
+# unzip the data file (alternatively could download new data using the
+# download-phage pipeline)
 
 unzip data.zip 
 
@@ -9,21 +18,23 @@ unzip data.zip
 conda env create -f environment.yml
 source activate base 
 conda activate phage-pangenomes
+
+# install defense-finder
 pip install mdmparis-defense-finder
 defense-finder update
 
 # run the pipeline that checks core synteny, and creates sytenic groups 
 #   the number of cores can be modified based on computing resources
-#   with 20 cores (64GB memory) this step takes approximately 25 minutes
+#   with 20 cores (64GB memory) this step takes approximately 15 minutes
 
 snakemake --cores 20 -s snakefile_synteny all
 
-# then run all of the non-linkage analyses (about 45 minutes)
+# then run all of the non-linkage analyses (about 35 minutes)
 
 snakemake --cores 20 -s snakefile_analysis all_except_linkage
 
 # then run the linkage analyses. this uses a lot of memory so is best on
-#   only one core, and takes about eight hours
+#   only one core, and takes about nine and a half hours
 
 snakemake --cores 1 -s snakefile_analysis linkage
 
@@ -33,6 +44,6 @@ snakemake --cores 1 -s snakefile_analysis linkage
 snakemake --cores 20 -s snakefile_subgroups all_except_linkage
 
 # finally, run the subgroup + processing linkage analyses
-#   this step takes around six hours
+#   this step takes around three hours. 
 
 snakemake --cores 1 -s snakefile_subgroups linkage
