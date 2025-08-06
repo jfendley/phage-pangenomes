@@ -9,7 +9,7 @@
 
 
 # unzip the data file (alternatively could download new data using the
-# download-phage pipeline)
+# phage-download pipeline)
 
 unzip data.zip 
 
@@ -19,8 +19,7 @@ conda env create -f environment.yml
 source activate base 
 conda activate phage-pangenomes
 
-# install defense-finder
-pip install mdmparis-defense-finder
+# update defense-finder
 defense-finder update
 
 # run the pipeline that checks core synteny, and creates sytenic groups 
@@ -37,6 +36,9 @@ snakemake --cores 20 -s snakefile_analysis all_except_linkage
 #   only one core, and takes about nine and a half hours
 
 snakemake --cores 1 -s snakefile_analysis linkage
+
+# then the file config/groups_to_process.json was manually created by 
+#   inspecting the results. If new data is used, a new file would be needed.
 
 # then run the non-linkage subgroup + processing analyses
 #   The following step should only take a minute or so. 
