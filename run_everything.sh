@@ -20,7 +20,7 @@ source activate base
 conda activate phage-pangenomes
 
 # update defense-finder
-defense-finder update
+defense-finder update --models-dir defense_finder_models
 
 # run the pipeline that checks core synteny, and creates sytenic groups 
 #   the number of cores can be modified based on computing resources
