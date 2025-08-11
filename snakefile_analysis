@@ -228,9 +228,16 @@ rule run_DefenseFinder:
     output:
         folder=directory("results/defense_finder"),
         gene_hits="results/defense_finder/all_genes_defense_finder_genes.tsv",
+    params:
+        models="defense_finder_models",
     shell:
         """
-        defense-finder run -o {output.folder} -a {input}
+        defense-finder run \
+            -o {output.folder} \
+            --models-dir {params.models} \
+            --skip-model-version-check \
+            -a \
+            {input}
         """
 
 

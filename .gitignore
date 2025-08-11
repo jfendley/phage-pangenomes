@@ -7,3 +7,5 @@
 /config_nonsyntenic
 /config_subgroups
 /scripts/__pycache__
+/.snakemake
+/defense_finder_models
