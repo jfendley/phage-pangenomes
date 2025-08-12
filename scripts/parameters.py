@@ -30,7 +30,13 @@ mpl.rcParams["legend.handlelength"] = 1
 mpl.rcParams["legend.title_fontsize"] = 10
 mpl.rcParams["xtick.labelsize"] = 10
 mpl.rcParams["ytick.labelsize"] = 10
-mpl.rcParams["text.usetex"] = True if shutil.which('latex') else False
 mpl.rcParams["font.family"] = "serif"
-mpl.rcParams["font.serif"] = "cm" if shutil.which('latex') else 'Liberation Serif'
-mpl.rcParams["text.latex.preamble"] = r"\usepackage{amsmath}"
+
+# LaTeX and TeX Live need to be installed for the desired figure formatting.
+#   If one or both of these is not installed, please comment out the following three lines,
+#   and uncomment the next two.
+mpl.rcParams["text.usetex"] = True if shutil.which("latex") else False
+mpl.rcParams["font.serif"] = "cm" if shutil.which("latex") else "Liberation Serif"
+mpl.rcParams["text.latex.preamble"] = r"\usepackage{amsmath} \usepackage{amsfonts}"
+# mpl.rcParams["text.usetex"] = False
+# mpl.rcParams["font.serif"] = "Liberation Serif"

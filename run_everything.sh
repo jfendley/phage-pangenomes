@@ -7,13 +7,11 @@
 #   longer used variables, calculate linkage only at short distances) to 
 #   reduce memory usage if needed.
 
+# first, ensure the data is is in the same format as the output of the phage-
+#   download pipeline
 
-# unzip the data file (alternatively could download new data using the
-# phage-download pipeline)
-
-unzip data.zip 
-
-# create and activate the conda environment
+# create and activate the conda environment. creating the conda environment 
+#   and updating the DefenseFinder models requires internet
 
 conda env create -f environment.yml
 source activate base 
@@ -21,6 +19,11 @@ conda activate phage-pangenomes
 
 # update defense-finder
 defense-finder update --models-dir defense_finder_models
+
+# now the rest of the script does not require internet access. However, LaTeX
+#   and TeX Live need to be installed to recreate the paper figures. If they 
+#   are not installed, you can modify parameters.py as suggested in the script 
+#   for it to run without LaTeX.
 
 # run the pipeline that checks core synteny, and creates sytenic groups 
 #   the number of cores can be modified based on computing resources
