@@ -80,8 +80,8 @@ def main():
         )
     axes[0].legend()
     axes[1].legend().set_visible(False)
-    axes[0].set_ylabel(r"${E}\left[\text{n. snps between recurrent mutations}\right]$")
-    axes[1].set_ylabel(r"${E}\left[\text{distance between recurrent mutations}\right]$")
+    axes[0].set_ylabel(r"$\mathbb{E}\left[\text{n. snps between recurrent mutations}\right]$")
+    axes[1].set_ylabel(r"$\mathbb{E}\left[\text{distance between recurrent mutations}\right]$")
     axes[0].set_xlabel("mean n. compatible snps")
     axes[1].set_xlabel("mean compatible interval size")
 
