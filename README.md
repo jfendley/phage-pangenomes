@@ -1,7 +1,9 @@
 
-This pipeline reproduces the analysis in J. M. Fendley et. al: "Synteny and linkage decay in bacteriophage pangenomes". 
+This pipeline produces the analysis in J. M. Fendley et. al: "Synteny and linkage decay in bacteriophage pangenomes". 
 
-To recreate the figures and all of the analysis using the data provided, download the data.zip file, add it to this folder, and then run the exectuable:
+To recreate the analysis in the paper, first ensure the data is in the correct format. Data from the ActinoBacteriophage Database at https://phagesDB.org can be downloaded using the [phage-download pipeline](https://github.com/jfendley/phage-download) which ensures the correct format. 
+
+Once the data is in the correct format, run the exectuable:
 ```
 bash run_everything.sh
 ```
@@ -23,8 +25,7 @@ The results folder will be in the following format, with all of the figures in t
 │   └── paper_figures/
 ```
 
-Alternatively, this pipeline is also adaptable for use with other sets of data provided in the same format. New data from the AcinoBacteriophage Database at https://phagesDB.org can be downloaded using the [phage-download pipeline](https://github.com/jfendley/phage-download)
- which ensures the correct format. 
+The file config/cluster_to_lifestyle.tsv was manually created from https://phagesdb.org/clusters/. The file config/groups_to_process.json was also manually created; see run_everything.sh for more details. There are step-by-step instructions included in run_everything.sh. 
 
-The file config/cluster_to_lifestyle.tsv was manually created from https://phagesdb.org/clusters/. The file config/groups_to_process.json was also manually created; see run_everything.sh for more details. There are step-by-step instructions included in run_everything.sh.
+Alternatively, this pipeline is also adaptable for use with other sets of data provided in the same format. Some minor things were coded specifically for the exact dataset used and would need to be modified for a new dataset.
 
