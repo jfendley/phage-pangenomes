@@ -38,11 +38,13 @@ def plot_subgroups(output, output_pdf, core_genome, linkage_list, weights_list):
 
     # initialize figure and relevant lists and add panel labels
     fig = plt.figure(layout="constrained", figsize=(6.5, 3.5))
-    gs = GridSpec(2, 2, height_ratios=[5, 1], width_ratios=[1, 2.8], figure=fig)
-    ax1, ax2 = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0:2, 1])
+    gs = GridSpec(2, 3, height_ratios=[5, 1], width_ratios=[1,0.001, 2.8], figure=fig)
+    ax1, ax2 = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0:2, 2])
     ax3 = fig.add_subplot(gs[1, 0])
+    ax4 = fig.add_subplot(gs[0:2,1])
     ax3.set_visible(False)
-    axes, x_loc, y_loc = [ax1, ax2], [-26, -32], [+25.8, -8]
+    ax4.set_visible(False)
+    axes, x_loc, y_loc = [ax1, ax2], [-26, -32], [+25.5, -7.8]
     cmap_max = 0.26  # hard-corded maximum distance to match the other plot
     panel_labels, cmap = ["a)", "b)"], "rainbow"
     main_colors = ["C3", "C0", "C5"]
@@ -62,7 +64,16 @@ def plot_subgroups(output, output_pdf, core_genome, linkage_list, weights_list):
 
     # plot the distance matrix
     im = axes[0].matshow(sorted_distance_matrix, vmin=0, vmax=cmap_max, cmap=cmap)
-    fig.colorbar(im, ax=axes[0], shrink=0.4, location="right")
+    cbar = fig.colorbar(im, ax=axes[0], shrink=0.5, location="right")
+    cbar.ax.set_yticks(
+        ticks=[0, 0.1, 0.2],
+        labels=[0, 0.1, 0.2],
+        rotation=270,
+        ha="center",
+        rotation_mode="anchor",
+        va="baseline",
+    )
+    cbar.ax.set_ylabel("core Hamming distance", rotation=270, labelpad=12.0, fontsize=10)
     axes[0].set_yticks(
         ticks=np.arange(0, 44, 20),
         labels=np.arange(0, 44, 20),
