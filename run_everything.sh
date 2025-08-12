@@ -8,7 +8,7 @@
 #   reduce memory usage if needed.
 
 # first, ensure the data is is in the same format as the output of the phage-
-#   download pipeline
+#   download pipeline (https://github.com/jfendley/phage-download)
 
 # create and activate the conda environment. creating the conda environment 
 #   and updating the DefenseFinder models requires internet
