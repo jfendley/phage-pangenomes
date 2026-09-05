@@ -7,8 +7,7 @@ Author: Jemma M. Fendley
 
 import numpy as np, pandas as pd
 import matplotlib.pyplot as plt, seaborn as sns
-import matplotlib as mpl
-import argparse, json
+import matplotlib as mpl, argparse
 import parameters  # preset matplotlib formatting
 from matplotlib.transforms import ScaledTranslation
 
@@ -37,7 +36,27 @@ def main():
         layout="constrained",
     )
     df = pd.read_csv(args.input, sep="\t")
-    print("Mean: ", np.mean(df["data_biallelic_mean_interval_size"]))
+
+    # print some summary statistics
+    print("Mean interval length: ", np.mean(df["data_biallelic_mean_interval_size"]))
+    df["snp_enrichment"] = (
+        df["expected_n_snps_biallelic"] / df["data_biallelic_mean_n_snps"]
+    )
+    mean_enrichment_snps = df["snp_enrichment"].mean()
+    df["length_enrichment"] = (
+        df["expected_distance_biallelic"] / df["data_biallelic_mean_interval_size"]
+    )
+    mean_enrichment_length = df["length_enrichment"].mean()
+    print("Mean ratio of expected length to length: ", mean_enrichment_length)
+    print("Mean ratio of expected n. snps to n. snps: ", mean_enrichment_snps)
+    print(
+        "N. groups with smaller expected length: ",
+        len(df[df["length_enrichment"] <= 1]),
+    )
+    print(
+        "N. groups with smaller expected n. snps interval size: ",
+        len(df[df["snp_enrichment"] <= 1]),
+    )
 
     # plot the data
     sns.scatterplot(
@@ -59,8 +78,37 @@ def main():
         label="data",
     )
     # plot line y=x for comparison
-    axes[0].plot(range(2, 100), range(2, 100), color="k", label=r"$y=x$")
-    axes[1].plot(range(9, 600), range(9, 600), color="k", label=r"$y=x$")
+    axes[0].set_xlim([2, 100])
+    axes[1].set_xlim([9, 600])
+    axes[0].plot(
+        range(2, 100), range(2, 100), color="k", alpha=0.5, label=r"$y=x$", linewidth=1
+    )
+    axes[1].plot(
+        range(9, 600), range(9, 600), color="k", alpha=0.5, label=r"$y=x$", linewidth=1
+    )
+
+    # plot also y=2x, y=5x, and y=15x for comparison
+    colors = ["C1", "C2", "C3", "C4"]
+    linestyle_list = ["--", "-.", ":"]
+    for j, i in enumerate([2, 5, 15]):
+        axes[0].plot(
+            np.arange(2, 100),
+            i * np.arange(2, 100),
+            color=colors[j],
+            linewidth=1,
+            linestyle=linestyle_list[j],
+            alpha=0.5,
+            label=r"$y={0:0.0f}x$".format(i),
+        )
+        axes[1].plot(
+            np.arange(9, 600),
+            i * np.arange(9, 600),
+            color=colors[j],
+            linewidth=1,
+            linestyle=linestyle_list[j],
+            alpha=0.5,
+            label=r"$y={0:0.0f}x$".format(i),
+        )
 
     # figure formatting
     letters = ["a)", "b)"]
@@ -78,10 +126,14 @@ def main():
             va="bottom",
             # fontfamily="serif",
         )
-    axes[0].legend()
+    axes[0].legend(loc="upper left", labelspacing=0)
     axes[1].legend().set_visible(False)
-    axes[0].set_ylabel(r"$\mathbb{E}\left[\text{n. snps between recurrent mutations}\right]$")
-    axes[1].set_ylabel(r"$\mathbb{E}\left[\text{distance between recurrent mutations}\right]$")
+    axes[0].set_ylabel(
+        r"$\mathbb{E}\left[\text{n. snps between recurrent mutations}\right]$"
+    )
+    axes[1].set_ylabel(
+        r"$\mathbb{E}\left[\text{distance between recurrent mutations}\right]$"
+    )
     axes[0].set_xlabel("mean n. compatible snps")
     axes[1].set_xlabel("mean compatible interval size")
 

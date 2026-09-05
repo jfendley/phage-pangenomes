@@ -85,20 +85,52 @@ def main():
     x_labels = axes[3, 0].get_xticklabels()
     axes[3, 0].set_xticks(x_axis, x_labels, rotation=90)
 
+    # abbreviate the genus by the first or first two letters
+    def add_genus_initial(species, genus):
+        if genus[0] != "M":
+            return genus[0] + ". " + species
+        else:
+            return genus[0:2] + ". " + species
+
+    df["most_commom_host_species_initial"] = df.apply(
+        lambda x: add_genus_initial(
+            x.most_common_host_species, x.most_common_host_genus
+        ),
+        axis=1,
+    )
+
+    # add the genus abbreviation to the genus label
+    def add_genus_abbrev(genus):
+        if genus[0] != "M":
+            return genus + " (" + genus[0] + ".)"
+        else:
+            return genus + " (" + genus[0:2] + ".)"
+
+    df["most_commom_host_genus_abbrev"] = df["most_common_host_genus"].apply(
+        add_genus_abbrev
+    )
+
     # plot the most common host species
     sns.countplot(
         data=df,
-        x="most_common_host_species",
+        x="most_commom_host_species_initial",
         ax=axes[3, 1],
-        order=df["most_common_host_species"].value_counts().index,
-        hue="most_common_host_genus",
+        order=df["most_commom_host_species_initial"].value_counts().index,
+        hue="most_commom_host_genus_abbrev",
     )
+
+    # figure formatting
     x_axis = axes[3, 1].get_xticks()
     x_labels = axes[3, 1].get_xticklabels()
-    axes[3, 1].set_xticks(x_axis, x_labels, rotation=90)
+    axes[3, 1].set_xticks(x_axis, x_labels, rotation=90, fontsize=8.5)
     axes[3, 1].set_xlabel("most common isolation host species")
     axes[3, 1].legend(
-        ncol=2, columnspacing=0.2, borderaxespad=0.3, fontsize=8, handlelength=0.5
+        ncol=1,
+        columnspacing=0.2,
+        borderaxespad=0.3,
+        fontsize=7,
+        handlelength=0.5,
+        labelspacing=0.35,
     )
     axes[3, 1].set_ylim([0, 32.5])  # removes tick label
 
@@ -123,7 +155,6 @@ def main():
                     + ScaledTranslation(-18 / 72, -2 / 72, fig.dpi_scale_trans)
                 ),
                 va="bottom",
-                # fontfamily="serif",
             )
             count += 1
 

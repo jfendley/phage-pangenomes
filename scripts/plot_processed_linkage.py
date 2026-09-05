@@ -6,7 +6,6 @@ This script plots a figure that shows the effect of processing the multiple-hapl
 Author: Jemma M. Fendley
 """
 
-# %%
 import pandas as pd, numpy as np
 import argparse, json
 import matplotlib.pyplot as plt
@@ -14,13 +13,13 @@ import parameters  # preset matplotlib formatting
 from utils import rolling_average  # calculates the rolling average
 
 
-# %%
 def plot_processed(output, output_pdf, linkage_list, weights_list):
     # initalize the figure and lists to iterate over
     group_name = linkage_list[0].split("/")[-1].split("_")[0]
     label_list = [group_name, group_name + " processed"]
     main_colors = ["C0", "C5"]
     background_colors = ["C4", "C1"]
+    shape_list = ["o", "s", "^", "*"]
 
     fig, axes = plt.subplots(1, 1, figsize=(4.5, 3.5), layout="constrained")
 
@@ -66,6 +65,7 @@ def plot_processed(output, output_pdf, linkage_list, weights_list):
             s=2,
             color=background_colors[i],
             rasterized=True,
+            marker=shape_list[2 * i + 1],
         )
 
         # plot the linkage data and the rolling averages
@@ -77,6 +77,7 @@ def plot_processed(output, output_pdf, linkage_list, weights_list):
             alpha=0.1,
             color=main_colors[i],
             rasterized=True,
+            marker=shape_list[2 * i],
         )
         axes.scatter(
             data[::-1].index[roll_large - 1 :],
@@ -85,6 +86,7 @@ def plot_processed(output, output_pdf, linkage_list, weights_list):
             s=2,
             color=main_colors[i],
             rasterized=True,
+            marker=shape_list[2 * i],
         )
 
     # format and save figure
@@ -108,9 +110,6 @@ def plot_processed(output, output_pdf, linkage_list, weights_list):
     )
     fig.savefig(output, dpi=450)
     fig.savefig(output_pdf, dpi=450)
-
-
-# %%
 
 
 if __name__ == "__main__":

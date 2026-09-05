@@ -221,6 +221,8 @@ def main():
     colors, label = ["C0", "C1"], ["{0:0.0f}\%".format(x) for x in numbers]
     data_list = [df["percent_junctions_all"], df["percent_junctions_threshold"]]
     means = [x.mean() for x in data_list]
+    line_style_list, hatch_list = ["dashed", (0, (1, 1))], ["||", "--"]
+
     for i, data in enumerate(data_list):
         ax_ins.hist(
             data,
@@ -231,17 +233,22 @@ def main():
                 np.max(data) + binsize,
                 binsize,
             ),
+            hatch=hatch_list[i],
         )
         ax_ins.axvline(
             means[i],
             color=colors[i],
-            linestyle="dashed",
+            linestyle=line_style_list[i],
             linewidth=3,
             label="mean",
             alpha=0.75,
         )
         axes[1].axhline(
-            y=numbers[i], color=colors[i], linestyle="--", alpha=0.75, linewidth=3
+            y=numbers[i],
+            color=colors[i],
+            linestyle=line_style_list[i],
+            alpha=0.75,
+            linewidth=3,
         )
 
     # in the main figure for each group plot the % of accessory phams contained in x%
@@ -263,7 +270,7 @@ def main():
         [0, 0.25, means[1], 0.5, means[0], 0.75, 1],
         [0, 25, round(means[1], 3) * 100, 50, round(means[0], 3) * 100, 75, 100],
     )
-    ax_ins.set_ylim([0, 37])
+    ax_ins.set_ylim([0, 35])
     tick_array = [0, 25, 50, 75, 100]
     axes[1].set_xticks(tick_array, tick_array)
     axes[1].set_yticks(tick_array, tick_array)

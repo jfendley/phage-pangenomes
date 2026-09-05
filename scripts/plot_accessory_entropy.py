@@ -7,12 +7,10 @@ Author: Jemma M. Fendley
 
 import json, argparse
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
+import numpy as np, pandas as pd
 from matplotlib.transforms import ScaledTranslation
 import parameters  # preset matplotlib formating
-import matplotlib as mpl
-import seaborn as sns
+import matplotlib as mpl, seaborn as sns
 
 mpl.rcParams["legend.handletextpad"] = 0.4
 
@@ -144,6 +142,7 @@ def main():
     pr_bins = np.arange(min_pr, max_pr + pr_binsize, pr_binsize)
 
     # plot the normalized participation ratios
+    line_style_list = ["-", "--", ":"]
     for i, x in enumerate(pr_list):
         hist = sns.histplot(
             ax=axes[2],
@@ -155,6 +154,7 @@ def main():
             element="step",
             fill=False,
             label=legend_list[i],
+            ls=line_style_list[i],
         )
         hist.set(ylabel=None)
     axes[2].legend()
@@ -179,9 +179,9 @@ def main():
         linewidth=1.5,
         label="data mean: {0:0.2f}".format(np.mean(df["pr"])),
     )
-    axes[1].axvline(1 / 5, color="C2", linestyle="dashed", linewidth=1, label="1/5")
-    axes[1].axvline(1 / 6, color="C3", linestyle="dashed", linewidth=1, label="1/6")
-    axes[1].axvline(1 / 7, color="C4", linestyle="dashed", linewidth=1, label="1/7")
+    axes[1].axvline(1 / 5, color="C2", linestyle="--", linewidth=1, label="1/5")
+    axes[1].axvline(1 / 6, color="C3", linestyle="-.", linewidth=1, label="1/6")
+    axes[1].axvline(1 / 7, color="C4", linestyle=":", linewidth=1, label="1/7")
     axes[1].legend()
     axes[1].set_xlabel("participation ratio (p.r.)")
 
@@ -201,6 +201,7 @@ def main():
             element="step",
             fill=False,
             label=legend_list[i],
+            ls=line_style_list[i],
         )
     axes[0].legend()
     axes[0].set_ylabel("cumulative n. groups (density)")

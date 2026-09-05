@@ -4,9 +4,8 @@ This script provides matplotlib formatting for consistency across all plots.
 Author: Jemma M. Fendley
 """
 
-import matplotlib as mpl
+import matplotlib as mpl, shutil
 from cycler import cycler
-import shutil
 
 color_palette = [
     "#332288",
@@ -18,7 +17,7 @@ color_palette = [
     "#44AA99",
     "#999933",
     "#AA4499",
-    "#DDDDDD",
+    "#BBBBBB",
 ]
 mpl.rcParams["axes.prop_cycle"] = cycler(color=color_palette)
 mpl.rcParams["font.size"] = 14
@@ -33,10 +32,11 @@ mpl.rcParams["ytick.labelsize"] = 10
 mpl.rcParams["font.family"] = "serif"
 
 # LaTeX and TeX Live need to be installed for the desired figure formatting.
-#   If one or both of these is not installed, please comment out the following three lines,
-#   and uncomment the next two.
 mpl.rcParams["text.usetex"] = True if shutil.which("latex") else False
-mpl.rcParams["font.serif"] = "cm" if shutil.which("latex") else "Liberation Serif"
+mpl.rcParams["font.serif"] = (
+    "Computer Modern" if shutil.which("latex") else "Liberation Serif"
+)
+
+# For consistent math text
+mpl.rcParams["mathtext.fontset"] = "cm" if shutil.which("latex") else "Liberation Serif"
 mpl.rcParams["text.latex.preamble"] = r"\usepackage{amsmath} \usepackage{amsfonts}"
-# mpl.rcParams["text.usetex"] = False
-# mpl.rcParams["font.serif"] = "Liberation Serif"

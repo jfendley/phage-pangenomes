@@ -1,5 +1,5 @@
 """
-This script plots linkage disequilibrium as a function of distanceance along the core genome. It
+This script plots linkage disequilibrium as a function of distance along the core genome. It
     also records statistics including the asymptote and maximum.
 
 Author: Jemma M. Fendley

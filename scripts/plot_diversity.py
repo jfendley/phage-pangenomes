@@ -7,6 +7,23 @@ Author: Jemma M. Fendley
 import matplotlib.pyplot as plt, seaborn as sns
 import pandas as pd, argparse, numpy as np
 import parameters  # preset Matplotlib formatting
+import matplotlib as mpl
+from cycler import cycler
+
+# modify the order of the color palette for this figure only
+color_palette = [
+    "#BBBBBB",
+    "#332288",
+    "#CC6677",
+    "#DDCC77",
+    "#117733",
+    "#88CCEE",
+    "#882255",
+    "#44AA99",
+    "#999933",
+    "#AA4499",
+]
+mpl.rcParams["axes.prop_cycle"] = cycler(color=color_palette)
 
 
 def main():
@@ -31,6 +48,7 @@ def main():
     # load the TSV file
     df = pd.read_csv(args.input, sep="\t")
     n_groups = len(df)
+    assert n_groups == 88, "There are not 88 groups, modify hard-coded label."
 
     # initialize the figure
     fig, axes = plt.subplots(
@@ -42,37 +60,39 @@ def main():
     df["mean pairwise coverage (\%)"] = df["mean_percent_pairwise_coverage"]
 
     # separate out groups mentioned in the paper (hard-coded)
-    select_groups_list = ["A11", "E", "EE", "DE1", "F1"]
-    df_select_groups = df[df["name"].isin(select_groups_list)]
-    df_other_groups = df[
-        df["name"].isin([x for x in df["name"] if x not in select_groups_list])
-    ]
+    select_groups_list = ["88 total groups", "A11", "E", "EE", "DE1", "F1"]
 
-    # plot the data separately
-    sns.scatterplot(
-        data=df_other_groups,
-        x="mean pairwise ANI in core genome (\%)",
-        y="mean pairwise coverage (\%)",
-        alpha=1,
-        label="{0:0.0f} total groups".format(n_groups),
-        color="C9",
-        s=50,
+    def figure_label(name):
+        # returns the label for the group in the figure
+        if name in select_groups_list:
+            return name
+        else:
+            return "88 total groups"
+
+    # add the figure labels and sort
+    df["figure_label"] = df["name"].apply(figure_label)
+    df["figure_label"] = pd.Categorical(
+        df["figure_label"], categories=select_groups_list, ordered=True
     )
+    df = df.sort_values(by="figure_label")
 
+    # plot the data
     sns.scatterplot(
-        data=df_select_groups,
+        data=df,
         x="mean pairwise ANI in core genome (\%)",
         y="mean pairwise coverage (\%)",
         alpha=0.8,
-        s=50,
-        hue="name",
+        size="figure_label",
+        sizes=[50, 90, 90, 90, 90, 90],
+        hue="figure_label",
+        style="figure_label",
     )
 
-    # add the species threshold
-    cutoffs, labels = [9500, 7000], ["species", "genus"]
-    rotation, offset, colors = [-26, -20], [119, -150], ["C5", "C6"]
+    cutoffs, labels = [9500, 7000, 2500], ["95\% ANI", "70\% ANI", "50\% ANI"]
+    rotation, offset, colors = [-26, -20, -20], [106, -160, -360], ["C6", "C7", "C8"]
+
     # add the species and genus thresholds
-    for i, label in enumerate(labels):
+    for i, label in enumerate(labels[:2]):
         x = np.linspace(int(cutoffs[i] / 100), 100, 1000)
         y = cutoffs[i] / x
         y2 = np.ones(1000) * 100
@@ -80,18 +100,21 @@ def main():
         axes.text(
             x[offset[i]],
             y[offset[i]],
-            label + " diversity",
-            fontsize=8.5,
+            "approx. " + label,
+            fontsize=8,
             rotation=rotation[i],
             rotation_mode="anchor",
         )
+
+        # add shading in the regions
         if i == 0:
             axes.fill_between(x, y, y2, color=colors[i], alpha=0.125)
-        elif i == 1:
-            x1, x2 = np.linspace(70, 95, 100), np.linspace(95, 100, 100)
-            axes.fill_between(x1, 7000 / x1, 9500 / x1, color="C6", alpha=0.05)
-            axes.fill_between(x2, 7000 / x2, np.ones(100) * 85, color="C6", alpha=0.05)
 
+    x1, x2 = np.linspace(70, 95, 100), np.linspace(95, 100, 100)
+    axes.fill_between(x1, 7000 / x1, 9500 / x1, color="C7", alpha=0.05)
+    axes.fill_between(x2, 7000 / x2, np.ones(100) * 85, color="C7", alpha=0.05)
+
+    # add vOTU thresholds and shading
     x, y, y2 = np.ones(100) * 95, np.linspace(85, 100, 100), np.linspace(50, 85, 100)
     axes.plot(x, y, color="k", linewidth=1, alpha=0.9)
     axes.plot(x, y2, color="k", linewidth=1, alpha=0.5, linestyle="dashed")
@@ -101,7 +124,7 @@ def main():
     axes.plot(x2, y, color="k", linewidth=1, alpha=0.5, linestyle="dashed")
     axes.text(95.35, 83.75, "vOTU diversity", fontsize=8.5)
 
-    # formating
+    # formatting
     axes.legend(
         handlelength=1,
         handletextpad=0.5,

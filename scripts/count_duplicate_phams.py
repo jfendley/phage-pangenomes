@@ -19,9 +19,13 @@ def main():
     )
     args = parser.parse_args()
 
-    all_phams, all_duplicate_phams, all_duplicate_core = set(), set(), set()
-    dict_list = []  # initialize
+    # initialize
+    all_phams, all_duplicate_phams = set(), set()
+    all_duplicate_core, all_multiple_core = set(), set()
+    dict_list = []
+
     for group in args.groups:
+        # load group JSON file
         with open(group) as f:
             G = json.load(f)
 
@@ -52,6 +56,17 @@ def main():
         row["n_duplicate_core"] = len(potential_core)
         all_duplicate_core.update(potential_core)
 
+        # count phams that appear more than once in every phage, and the
+        #   same multiple, e.g. exactly twice in each genome
+        multiple_potential_core = [
+            x["pham_ID"]
+            for x in duplicate_phams_list
+            if x["total_count"] % len(G["paths"]) == 0
+            and x["pham_ID"] in potential_core
+        ]
+        row["n_duplicate_core_multiples"] = len(multiple_potential_core)
+        all_multiple_core.update(multiple_potential_core)
+
         # count which phages have phams that appear more than once
         row["n_phages_with_duplicates"] = len(
             [
@@ -74,6 +89,7 @@ def main():
         "n_phams": len(all_phams),
         "n_duplicate": len(all_duplicate_phams),
         "n_duplicate_core": len(all_duplicate_core),
+        "n_duplicate_core_multiples": len(all_multiple_core),
         "n_phages_with_duplicates": df["n_phages_with_duplicates"].sum(),
     }
 

@@ -75,6 +75,21 @@ def main():
                 )
             ]  # core phams are in every phage exactly once
             core_dict[name] = core_phams
+
+            # confirm that the core phams follow the same order in every pham
+            #   extract only the order (including standedness) of the core phams for each genome/path
+            core_paths = [
+                [
+                    y["pham_ID"] + y["strand"]
+                    for y in x["path"]
+                    if y["pham_ID"] in core_phams
+                ]
+                for x in new_paths
+            ]
+
+            # find all of the possible core pham orderings
+            unique_unsorted = np.unique(core_paths, axis=0)
+            assert len(unique_unsorted) == 1, "Resulting group not syntenic."
         else:
             # can save directly with no modifications, even for the cyclic groups
             core_dict[name] = [

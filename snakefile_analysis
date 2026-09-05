@@ -1,6 +1,6 @@
 """
 This pipeline completes the accessory and linkage disequilibrium analyses.
-    It creates Figures 4, 5, 6, S2, S3, S4, S5, S6, S8, S9, S10, S11, as well as the
+    It creates Figures 4-6, S3-S7, S9-10, and S12-S14 as well as the
     config files necessary for the next pipeline.
 
 Author: Jemma M. Fendley
@@ -71,11 +71,11 @@ rule build_group_json:
         phages=lambda w: expand(
             "data/phages/{ID}/{ID}_genes.json", ID=group_phages[w.group]
         ),
+    output:
+        "results/groups/{group}/{group}_syntenic.json",
     params:
         type=lambda w: group_type[w.group],
         dict=config["phage_ids_to_names"],
-    output:
-        "results/groups/{group}/{group}_syntenic.json",
     shell:
         """
         python scripts/build_group.py -o {output} -t {params.type} -d {params.dict} -p {input.phages}
@@ -87,10 +87,10 @@ rule build_group_json_cyclic:
     input:
         original_json="results/groups/{group}/{group}_graph.json",
         nonsyntenic_info=config["nonsyntenic_groups"],
-    params:
-        synteny=lambda w: group_synteny[w.group],
     output:
         "results/groups/{group}/{group}_permuted.json",
+    params:
+        synteny=lambda w: group_synteny[w.group],
     shell:
         """
         python scripts/build_group_cyclic.py -o {output} -i {input.original_json} -n {input.nonsyntenic_info} -s {params.synteny}
@@ -114,14 +114,14 @@ def group_json(group):
 rule accessory_pham_locations:
     input:
         group_json=lambda w: group_json(w.group),
+    output:
+        "results/groups/{group}/{group}_accessory/{group}_locations.json",
     params:
         duplicate="No",  #whether or not to include phams that appear multiple times in a phage genome
         core_phams=lambda w: group_core[w.group],
-    output:
-        "results/groups/{group}/{group}_accessory/{group}_locations.json",
     shell:
         """
-        python scripts/accessory_locations.py -o {output} -i {input.group_json} -d {params.duplicate} -c {params.core_phams} 
+        python scripts/accessory_locations.py -o {output} -i {input.group_json} =-d {params.duplicate} -c {params.core_phams}
         """
 
 
@@ -129,14 +129,14 @@ rule accessory_pham_locations:
 rule all_accessory_pham_locations:
     input:
         group_json=lambda w: group_json(w.group),
+    output:
+        "results/groups/{group}/{group}_accessory/{group}_locations_all.json",
     params:
         duplicate="Yes",  #whether or not to include phams that appear multiple times in a phage genome
         core_phams=lambda w: group_core[w.group],
-    output:
-        "results/groups/{group}/{group}_accessory/{group}_locations_all.json",
     shell:
         """
-        python scripts/accessory_locations.py -o {output} -i {input.group_json} -d {params.duplicate} -c {params.core_phams} 
+        python scripts/accessory_locations.py -o {output} -i {input.group_json} -d {params.duplicate} -c {params.core_phams}
         """
 
 
@@ -174,10 +174,10 @@ rule accessory_synteny:
     input:
         group_json=lambda w: group_json(w.group),
         accessory_locations=rules.accessory_pham_locations.output,
-    params:
-        core_phams=lambda w: group_core[w.group],
     output:
         temp("results/groups/{group}/{group}_accessory/{group}_synteny.tsv"),
+    params:
+        core_phams=lambda w: group_core[w.group],
     shell:
         """
         python scripts/accessory_synteny.py -o {output} -g {input.group_json} -a {input.accessory_locations} -c {params.core_phams}
@@ -228,16 +228,9 @@ rule run_DefenseFinder:
     output:
         folder=directory("results/defense_finder"),
         gene_hits="results/defense_finder/all_genes_defense_finder_genes.tsv",
-    params:
-        models="defense_finder_models",
     shell:
         """
-        defense-finder run \
-            -o {output.folder} \
-            --models-dir {params.models} \
-            --skip-model-version-check \
-            -a \
-            {input}
+        defense-finder run -o {output.folder} -a {input}
         """
 
 
@@ -262,10 +255,10 @@ rule pham_functions:
         ),
         defense=rules.process_DefenseFinder.output,
         accessory_locations=rules.all_accessory_pham_locations.output,
-    params:
-        core_phams=lambda w: group_core[w.group],
     output:
         temp("results/groups/{group}/{group}_pham_functions_hotspots.tsv"),
+    params:
+        core_phams=lambda w: group_core[w.group],
     shell:
         """
         python scripts/pham_functions.py -o {output} -d {input.defense} -a {input.accessory_locations} -c {params.core_phams} -p {input.phage_files}
@@ -357,12 +350,12 @@ rule core_genome:
     input:
         alignments=lambda w: core_dna_alignments(w.group),
         group_info=lambda w: group_json(w.group),
-    params:
-        core=lambda w: group_core[w.group],
     output:
         fasta="results/groups/{group}/{group}_core/{group}_core_genome.fa",
         starts="results/groups/{group}/{group}_core/{group}_core_pham_starts.json",
-        strands = "results/groups/{group}/{group}_core/{group}_core_pham_strands.json"
+        strands="results/groups/{group}/{group}_core/{group}_core_pham_strands.json",
+    params:
+        core=lambda w: group_core[w.group],
     shell:
         """
         python scripts/core_genome.py -g {input.group_info} -o {output.fasta} -s {output.starts} -r {output.strands} -c {params.core} -a {input.alignments}
@@ -392,11 +385,11 @@ rule overlap:
     input:
         accessory=expand(rules.all_accessory_pham_locations.output, group=all_groups),
         core=expand(rules.core_position_to_pham.output, group=all_groups),
-    params:
-        cyclic=cyclic_groups,
     output:
         png="results/paper_figures/core_overlap.png",
         pdf="results/paper_figures/core_overlap.pdf",
+    params:
+        cyclic=cyclic_groups,
     shell:
         """
         python scripts/overlap.py -o {output.png} -p {output.pdf} -c {params.cyclic} -i {input.core} -a {input.accessory}
@@ -662,12 +655,39 @@ rule plot_linkage_disequilibrium:
         """
 
 
+# plot the linkage disequilibrium as a function of core genome distance on a semi log axis
+rule plot_linkage_disequilibrium_semilog:
+    input:
+        linkage=rules.linkage_disequilibrium.output,
+        reference_phage=lambda w: get_reference_positions(w.group, 1),
+        weights=rules.snp_density.output.weights,
+    output:
+        fig="results/groups/{group}/{group}_core/{group}_linkage_semilog_subtract.png",
+        data="results/groups/{group}/{group}_core/{group}_linkage_statistics_semilog.tsv",
+    shell:
+        """
+        python scripts/plot_linkage_semilog.py -o {output.fig} -s {output.data} -l {input.linkage} -r {input.reference_phage} -w {input.weights}
+        """
+
+
 # compiles all of the linkage disequilibrium statistics across all the gruops
 rule all_linkage_information:
     input:
         expand(rules.plot_linkage_disequilibrium.output.data, group=all_groups),
     output:
         "results/all_groups_files/linkage_statistics.tsv",
+    shell:
+        """
+        head -n 1 {input[0]} > {output} && tail -n+2 -q {input} >> {output}
+        """
+
+
+# compile all of the linkage disequilibrium semilog statistics across all gruops
+rule all_linkage_information_semilog:
+    input:
+        expand(rules.plot_linkage_disequilibrium_semilog.output.data, group=all_groups),
+    output:
+        "results/all_groups_files/linkage_statistics_semilog.tsv",
     shell:
         """
         head -n 1 {input[0]} > {output} && tail -n+2 -q {input} >> {output}
@@ -683,13 +703,13 @@ rule linkage_paper_figures:
         linkage=expand(rules.linkage_disequilibrium.output, group=paper_groups),
         weights=expand(rules.snp_density.output.weights, group=paper_groups),
         core_genome=expand(rules.core_genome.output.fasta, group=paper_groups),
-    params:
-        groups=paper_groups,
     output:
         png="results/paper_figures/linkage.png",
         pdf="results/paper_figures/linkage.pdf",
         structure_png="results/paper_figures/linkage_structure.png",
         structure_pdf="results/paper_figures/linkage_structure.pdf",
+    params:
+        groups=paper_groups,
     shell:
         """
         python scripts/plot_linkage_paper_figures.py -o {output.png} -p {output.pdf} -s {output.structure_png} -f {output.structure_pdf} -g {params.groups} -l {input.linkage} -w {input.weights} -c {input.core_genome}
@@ -730,14 +750,30 @@ rule plot_example_weights:
 rule residual_linkage:
     input:
         statistics=rules.distance_statistics.output,
-        haplotype_groups="config/groups_to_process.json",
         linkage_information=rules.all_linkage_information.output,
     output:
         png="results/paper_figures/residual_linkage.png",
         pdf="results/paper_figures/residual_linkage.pdf",
     shell:
         """
-        python scripts/residual_linkage.py -o {output.png} -p {output.pdf} -s {input.statistics} -g {input.haplotype_groups} -l {input.linkage_information} 
+        python scripts/residual_linkage.py -o {output.png} -p {output.pdf} -s {input.statistics} -l {input.linkage_information}
+        """
+
+
+# plots a figure for the SI which shows the length scales on which linkage decays.
+rule distance_estimate:
+    input:
+        linkage1=expand(rules.linkage_disequilibrium.output, group="AY"),
+        weights1=expand(rules.snp_density.output.weights, group="AY"),
+        linkage2=expand(rules.linkage_disequilibrium.output, group="BU"),
+        weights2=expand(rules.snp_density.output.weights, group="BU"),
+        summary=rules.all_linkage_information_semilog.output,
+    output:
+        png="results/paper_figures/linkage_distance.png",
+        pdf="results/paper_figures/linkage_distance.pdf",
+    shell:
+        """
+        python scripts/linkage_distance.py -o {output.png} -p {output.pdf} -s {input.summary} -l1 {input.linkage1} -w1 {input.weights1} -l2 {input.linkage2} -w2 {input.weights2}
         """
 
 
@@ -766,4 +802,5 @@ rule linkage:
         rules.plot_example_weights.output,
         rules.linkage_paper_figures.output,
         rules.all_linkage_information.output,
+        rules.distance_estimate.output,
         expand(rules.linkage_distribution.output, group=all_groups),

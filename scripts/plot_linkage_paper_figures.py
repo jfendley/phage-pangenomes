@@ -4,7 +4,6 @@ This script plots the two main linkage diseqiulibrium figures in the main text.
 Author: Jemma M. Fendley
 """
 
-# %%
 import pandas as pd, numpy as np
 import argparse, json, matplotlib.pyplot as plt
 from Bio import AlignIO
@@ -24,7 +23,6 @@ def get_bin(position):
     return position // binsize
 
 
-# %%
 def plot_figures(
     groups,
     linkage_files,
@@ -223,6 +221,7 @@ def plot_figures(
             s=2,
             color=secondary_colors[i],
             rasterized=True,
+            marker="s",
         )
         axes_main[i].scatter(
             data[::-1].index,
@@ -344,7 +343,6 @@ def plot_figures(
     fig2a.savefig(output_pdf, dpi=450)
 
 
-# %%
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="create LD file")

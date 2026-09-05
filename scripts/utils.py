@@ -1,5 +1,5 @@
 """
-This script contains any function that is used in multiple scripts.
+This script contains functions that are used in multiple scripts.
 
 Author: Jemma M. Fendley, with some code adapted from https://gmarti.gitlab.io/ml/2017/09/07/how-to-sort-distance-matrix.html
 """
@@ -245,5 +245,6 @@ def rolling_average(data, roll_large):
             + list(data[::-1].rolling(roll_small).mean().values[hundred:ten])
             + list(data[::-1].values[ten:])
         )
+
     assert len(rolling_data) == len(data) - roll_large + 1
     return rolling_data

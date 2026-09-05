@@ -4,8 +4,7 @@ This script creates a figure in the paper that illustrates core synteny.
 Author: Jemma M Fendley
 """
 
-import json, argparse
-import numpy as np
+import json, argparse, numpy as np
 from matplotlib.gridspec import GridSpec
 from matplotlib.transforms import ScaledTranslation
 import matplotlib.pyplot as plt
@@ -49,7 +48,7 @@ def main():
         cyclic_percents, return_counts=True
     )
     cyclic_labels = [
-        "cyclic permutations ({0:0.0f} groups)".format(len(cyclic_percents)),
+        "cyclic permutations/rotations ({0:0.0f} groups)".format(len(cyclic_percents)),
         "_nolegend_",
         "_nolegend_",
     ]
@@ -80,6 +79,7 @@ def main():
         nonsyntenic_cayley,
         s=5,
         rasterized=True,
+        marker="s",
         label="partially syntenic ({0:0.0f} groups)".format(len(nonsyntenic_percent)),
     )
 
@@ -91,6 +91,7 @@ def main():
             s=5 * counts_cyclic_percents[index],
             color="C1",
             rasterized=True,
+            marker="^",
             label=cyclic_labels[index],
         )
 

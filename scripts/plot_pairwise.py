@@ -54,8 +54,18 @@ def main():
     # add the mean core pham lengths to the dictionary
     data["mean_core_pham_length"] = data["group"].map(core_length_dict)
 
-    # plot the maximum estimated recombination length v.s. mean core pham length
     fig, axes = plt.subplots(1, 1, layout="constrained", figsize=(5, 4))
+
+    # plot the maximum estimated recombination length v.s. mean core pham length
+    sns.scatterplot(
+        data=data,
+        x="mean_core_pham_length",
+        y="max_distance",
+        label="{0:0.0f} groups".format(len(data)),
+        ax=axes,
+        alpha=0.8,
+        color="C0",
+    )
 
     # plot the lines y=x and y=2x for comparison
     xlims = (
@@ -70,17 +80,7 @@ def main():
     # format figure and save
     axes.set_xlim([xlims[0], xlims[1]])
     axes.plot(xlims, xlims, label=r"$y=x$", color="C1")
-    axes.plot(xlims, xlims2, label=r"$y=2x$", color="C2")
-
-    sns.scatterplot(
-        data=data,
-        x="mean_core_pham_length",
-        y="max_distance",
-        label="{0:0.0f} groups".format(len(data)),
-        ax=axes,
-        alpha=0.8,
-        color="C0",
-    )
+    axes.plot(xlims, xlims2, label=r"$y=2x$", color="C2", linestyle="--")
     axes.set_xlabel("mean core pham length")
     axes.set_ylabel("maximum estimated recombination length")
     axes.legend()

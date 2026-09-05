@@ -5,9 +5,8 @@ This scripts investigates the compatibility of SNPs (whether or not they pass th
 Author: Jemma M. Fendley
 """
 
-import numpy as np, pandas as pd
+import numpy as np, pandas as pd, argparse
 from Bio import AlignIO
-import argparse
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import parameters  # preset matplotlib formatting
@@ -19,7 +18,7 @@ from utils import find_snp_positions
 mpl.rcParams["legend.handletextpad"] = 0.4
 
 
-def calculate_expected_distance(n_snps, N):
+def calculate_expected(n_snps, N):
     """
     This function calculates the expected distance between expected recurrent mutation.
 
@@ -27,17 +26,15 @@ def calculate_expected_distance(n_snps, N):
     n_snps: (integer) the number of positions with SNPs in the core genome alignment
 
     Given N, n_snps, this function estimates the mutation number K and then the expected
-    number of sites with more than one mutation (n_reccurrent) and then returns the expected
-    distance between recurrent mutations.
-
-    It also returns the expected number of SNPs between reccurent mutations.
+    number of sites with more than one mutation (n_more_than_one) and the number of sites
+    with exactly two mutations (n_two).
 
     For more detail on this estimation, please see the SI F SNP compatibility
     """
     K = np.log((N - n_snps) / N) / np.log((N - 1) / N)
-    n_reccurent = N - N * ((N - 1) / N) ** K - K * ((N - 1) / N) ** (K - 1)
-    recurrent_distance = N / n_reccurent
-    return round(recurrent_distance), round(n_snps / n_reccurent)
+    n_more_than_one = N - N * ((N - 1) / N) ** K - K * ((N - 1) / N) ** (K - 1)
+    n_twice = (K * (K - 1) / 2) * ((N - 1) / N) ** (K - 2) * (1 / N)
+    return n_more_than_one, n_twice
 
 
 def four_allele_test(first_phages_1, second_phages_1, first_phages_2, second_phages_2):
@@ -94,30 +91,50 @@ def main():
     # find the positions in the core genome alignments which have SNPs, and record also
     #   the counts of each alelle at each site
     dna_alphabet = ["G", "T", "A", "C"]
-    core_genome_alignment = np.array(AlignIO.read(args.core_genome, "fasta"))
-    n_positions = core_genome_alignment.shape[1]
+    core_genome_alignment_initial = np.array(AlignIO.read(args.core_genome, "fasta"))
+
+    # find the positions that have gaps as the majority frequency
+    allele_counts_initial = np.array(
+        [np.sum(core_genome_alignment_initial == nuc, axis=0) for nuc in dna_alphabet]
+    )
+    gap_counts = np.array(np.sum(core_genome_alignment_initial == "-", axis=0))
+    majority_gap = set(
+        np.where((np.max(allele_counts_initial, axis=0) <= gap_counts))[0]
+    )
+
+    # find the overlap positions
+    position_df = pd.read_csv(args.position_to_pham, sep="\t")
+    overlap_positions = set(position_df[position_df["overlap"]]["position"])
+
+    # remove overlap and majority gap positions from the core genome alignment
+    delete_list = list(majority_gap.union(overlap_positions))
+    core_genome_alignment = np.delete(
+        core_genome_alignment_initial, delete_list, axis=1
+    )
+
+    # find the SNP positions and the biallelic SNP positions
     allele_counts = np.array(
         [np.sum(core_genome_alignment == nuc, axis=0) for nuc in dna_alphabet]
     )
-    all_snp_positions, all_biallelic_snp_positions = find_snp_positions(
-        core_genome_alignment
-    )
-
-    # find the overlap positions and remove from analysis
-    position_df = pd.read_csv(args.position_to_pham, sep="\t")
-    overlap_positions = set(position_df[position_df["overlap"]]["position"])
-    snp_positions = np.sort(list(set(all_snp_positions) - overlap_positions))
-    biallelic_snp_positions = np.sort(
-        list(set(all_biallelic_snp_positions) - overlap_positions)
-    )
+    snp_positions = np.where(np.count_nonzero(allele_counts, axis=0) >= 2)[0]
+    biallelic_snp_positions = np.where(np.count_nonzero(allele_counts, axis=0) == 2)[0]
+    n_positions = np.shape(core_genome_alignment)[1]
 
     # record the expected n. snps and distance between recurrent mutations
     dict = {"group": group_name}
-    dict["expected_distance"], dict["expected_n_snps"] = calculate_expected_distance(
-        len(snp_positions), n_positions
-    )
-    dict["expected_distance_biallelic"], dict["expected_n_snps_biallelic"] = (
-        calculate_expected_distance(len(biallelic_snp_positions), n_positions)
+    n_reccurent, n_twice = calculate_expected(len(snp_positions), n_positions)
+
+    # for all SNP sites, we use a conservative estimate of expected reccurent mutations, i.e.
+    #   the expected number of sites with more than one mutation
+    dict["expected_distance"] = round(n_positions / n_reccurent)
+    dict["expected_n_snps"] = round(len(snp_positions) / n_reccurent)
+
+    # for bi-allelic sites we use a more accurate estimate, the expected number of sites with
+    #   exactly two mutations. The factor of 3 comes from the fact that the expected number that
+    #   are the *same* two mutations = 1/3 * n_twice
+    dict["expected_distance_biallelic"] = round(3 * n_positions / n_twice)
+    dict["expected_n_snps_biallelic"] = round(
+        3 * len(biallelic_snp_positions) / n_twice
     )
 
     # create dictionaries that record the phages at each site with the top two alleles

@@ -6,7 +6,6 @@ This script plots a figure that shows the effect on the linkage disequilbirium r
 Author: Jemma M. Fendley
 """
 
-# %%
 import pandas as pd, numpy as np
 import argparse, json, matplotlib.pyplot as plt
 from matplotlib.transforms import ScaledTranslation
@@ -95,7 +94,7 @@ def plot_linkage_weights(linkage, reference, weights_file, output, output_pdf):
     data_labels = ["data", "data SNP weighted"]
     count_labels = ["n. pairs of SNPs", "sum of weights"]
     background_labels = ["random expectation", "random expectation SNP weighted"]
-
+    shape_list = ["o", "s", "^", "*"]
     for i in range(2):
         for j in range(2):
             # plot the random expectations
@@ -107,6 +106,7 @@ def plot_linkage_weights(linkage, reference, weights_file, output, output_pdf):
                 rasterized=True,
                 color=secondary_colors[j],
                 alpha=0.8,
+                marker=shape_list[2 * j + 1],
             )
             # plot the main data
             axes[0, i].scatter(
@@ -117,6 +117,7 @@ def plot_linkage_weights(linkage, reference, weights_file, output, output_pdf):
                 label="_nolegend_",
                 s=0.7,
                 alpha=0.1,
+                marker=shape_list[2 * j],
             )
             # plot the rolling averages
             axes[0, i].scatter(
@@ -127,6 +128,7 @@ def plot_linkage_weights(linkage, reference, weights_file, output, output_pdf):
                 alpha=0.8,
                 color=main_colors[j],
                 rasterized=True,
+                marker=shape_list[2 * j],
             )
             # plot the amount of data
             axes[1, i].scatter(
@@ -137,6 +139,7 @@ def plot_linkage_weights(linkage, reference, weights_file, output, output_pdf):
                 alpha=0.8,
                 color=main_colors[j],
                 rasterized=True,
+                marker=shape_list[j],
             )
 
             # figure formatting
@@ -169,7 +172,6 @@ def plot_linkage_weights(linkage, reference, weights_file, output, output_pdf):
     fig.savefig(output_pdf, dpi=450)
 
 
-# %%
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="plot effects of weights on linkage")

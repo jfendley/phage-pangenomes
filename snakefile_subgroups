@@ -1,11 +1,11 @@
 """
-This pipeline runs the analyses on subgroups and regions with multiple haplotypes. 
+This pipeline runs the analyses on subgroups and regions with multiple haplotypes.
     It create figures 7 and S7.
 
 Author: Jemma M. Fendley
 """
 
-import json
+import json, numpy as np
 
 
 configfile: "config_subgroups.yaml"
@@ -28,6 +28,19 @@ group_to_subgroups = {
     x: [y for y, z in subgroup_to_group.items() if y in all_subgroups and z == x]
     for x in all_groups
 }
+group_to_all_subgroups = group_to_subgroups = {
+    x: [y for y, z in subgroup_to_group.items() if z == x] for x in all_groups
+}
+group_to_sizes = {
+    x: [len(subgroup_phages[z]) for z in y] for x, y in group_to_all_subgroups.items()
+}
+
+# groups with exactly 2 subgroups with at least 10 phages:
+groups_for_snp_compatibility = [
+    x
+    for x, y in group_to_sizes.items()
+    if np.count_nonzero(np.array(y) >= 10) == 2 and len(y) == 2
+]
 
 # extract the list of nonsyntenic and cyclic groups
 with open(config["nonsyntenic_groups"]) as f:
@@ -64,40 +77,24 @@ with open(config["groups_to_process"]) as f:
 
 
 def core_starts(group):
-    return (
-        "results/groups/"
-        + group
-        + "/"
-        + group
-        + "_core/"
-        + group
-        + "_core_pham_starts.json"
-    )
+    return f"results/groups/{group}/{group}_core/{group}_core_pham_starts.json"
 
 
 def core_strands(group):
-    return (
-        "results/groups/"
-        + group
-        + "/"
-        + group
-        + "_core/"
-        + group
-        + "_core_pham_strands.json"
-    )
+    return f"results/groups/{group}/{group}_core/{group}_core_pham_strands.json"
 
 
 # creates the core genome for the subgroup
 rule subgroup_core_genome:
     input:
         "results/groups/{group}/{group}_core/{group}_core_genome.fa",
-    params:
-        phages=lambda w: subgroup_phages[w.subgroup],
     output:
         "results/groups/{group}/{group}_core/{group}_subgroups/{subgroup}_core_genome.fa",
+    params:
+        phages=lambda w: subgroup_phages[w.subgroup],
     shell:
         """
-        python scripts/subgroup_core_genome.py -i {input} -o {output} -p {params.phages} 
+        python scripts/subgroup_core_genome.py -i {input} -o {output} -p {params.phages}
         """
 
 
@@ -221,42 +218,17 @@ def plot_all_subgroups(group):
     )
 
 
-# plots the figure that shows the linkage of the subgroups of DE1
-rule plot_subgroups_DE1:
-    input:
-        group_linkage="results/groups/DE1/DE1_core/DE1_linkage.feather",
-        group_weights="results/groups/DE1/DE1_core/DE1_snp_density.json",
-        core_genome="results/groups/DE1/DE1_core/DE1_core_genome.fa",
-        linkage=expand(
-            rules.linkage_disequilibrium.output,
-            group="DE1",
-            subgroup=group_to_subgroups["DE1"],
-        ),
-        weights=expand(
-            rules.snp_density.output.weights,
-            group="DE1",
-            subgroup=group_to_subgroups["DE1"],
-        ),
-    output:
-        png="results/paper_figures/subgroups_linkage_DE1.png",
-        pdf="results/paper_figures/subgroups_linkage_DE1.pdf",
-    shell:
-        """
-        python scripts/plot_subgroups.py -o {output.png} -p {output.pdf} -g {input.group_linkage} -s {input.group_weights} -c {input.core_genome} -l {input.linkage} -w {input.weights}
-        """
-
-
 # processes the core genome in the multiple haplotype regions, so that the linkage disequilbrium analysis
 #   will only consider SNPs which are deviations from the haplotype consensus sequences
 rule process_core_genome:
     input:
         core_genome="results/groups/{group}/{group}_core/{group}_core_genome.fa",
+    output:
+        "results/groups/{group}/{group}_core/{group}_processed/{group}_processed_core_genome.fa",
     params:
         start=lambda w: process_start[w.group],
         end=lambda w: process_end[w.group],
         n=lambda w: process_n[w.group],
-    output:
-        "results/groups/{group}/{group}_core/{group}_processed/{group}_processed_core_genome.fa",
     shell:
         """
         python scripts/process_core_genome.py -o {output} -i {input} -s {params.start} -e {params.end} -n {params.n}
@@ -319,6 +291,7 @@ rule plot_linkage_disequilibrium_processed:
         """
 
 
+# plots the linkage disequilibrium of group E pre- and post- haplotype-region processing
 rule plot_processed_E:
     input:
         png="results/groups/E/E_core/E_processed/E_processed_linkage.png",
@@ -333,11 +306,56 @@ rule plot_processed_E:
         """
 
 
+# plots the linkage of subgroups of DE1 as well as a summary plot of residual linkage across all groups
+rule residual_linkage_and_subgroups:
+    input:
+        statistics="results/all_groups_files/distance_statistics.tsv",
+        linkage_information="results/all_groups_files/linkage_statistics.tsv",
+        group_linkage="results/groups/DE1/DE1_core/DE1_linkage.feather",
+        group_weights="results/groups/DE1/DE1_core/DE1_snp_density.json",
+        core_genome="results/groups/DE1/DE1_core/DE1_core_genome.fa",
+        linkage=expand(
+            rules.linkage_disequilibrium.output,
+            group="DE1",
+            subgroup=group_to_subgroups["DE1"],
+        ),
+        weights=expand(
+            rules.snp_density.output.weights,
+            group="DE1",
+            subgroup=group_to_subgroups["DE1"],
+        ),
+    output:
+        png="results/paper_figures/residual_linkage_and_subgroups.png",
+        pdf="results/paper_figures/residual_linkage_and_subgroups.pdf",
+    shell:
+        """
+        python scripts/plot_subgroups_residual_summary.py -o {output.png} -p {output.pdf} -s {input.statistics} -i {input.linkage_information} -g {input.group_linkage} -t {input.group_weights} -c {input.core_genome} -l {input.linkage} -w {input.weights}
+        """
+
+
+# calculates SNP compatibility across the subgroup separation
+rule snp_compatibility_subgroups:
+    input:
+        subgroups=config["subgroup_phages"],
+        core_genomes=[
+            f"results/groups/{group}/{group}_core/{group}_core_genome.fa"
+            for group in groups_for_snp_compatibility
+        ],
+    output:
+        png="results/paper_figures/subgroup_snps.png",
+        pdf="results/paper_figures/subgroup_snps.pdf",
+    shell:
+        """
+        python scripts/snp_compatibility_subgroups.py -o {output.png} -p {output.pdf} -s {input.subgroups} -c {input.core_genomes}
+        """
+
+
 # runs everything up to the linkage analysis
 rule all_except_linkage:
     input:
         [all_subgroups(group) for group in all_groups],
         expand(rules.snp_density_processed.output, group=process_groups),
+        rules.snp_compatibility_subgroups.output,
 
 
 # runs the linkage disequilibrium analyses. This needs to be done on only one core to avoid over-use of memory
@@ -346,5 +364,5 @@ rule linkage:
         [plot_all_subgroups(group) for group in all_groups],
         expand(rules.plot_linkage_disequilibrium_processed.output, group=process_groups),
         expand(rules.linkage_distribution_processed.output, group=process_groups),
-        rules.plot_subgroups_DE1.output,
         rules.plot_processed_E.output,
+        rules.residual_linkage_and_subgroups.output,

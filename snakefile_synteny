@@ -1,8 +1,8 @@
 """
-This pipeline reports basic statistics on each group, including checking the synteny. 
-    This pipeline will create Figures 1, 3, and SI1 in the paper, as well as the tables in the SI
+This pipeline reports basic statistics on each group, including checking the synteny.
+    This pipeline will create Figures 1, 3, SI1, SI2 in the paper, as well as the tables in the SI
     It also creates the neccessory config file for the next pipeline, as well as the necessary .gfa
-    files to input into Bandage to create Figure 2. 
+    files to input into Bandage to create Figure 2.
 
 Author: Jemma M. Fendley
 """
@@ -69,11 +69,11 @@ rule build_group_json:
         phages=lambda w: expand(
             "data/phages/{ID}/{ID}_genes.json", ID=group_phages()[w.group]
         ),
+    output:
+        "results/groups/{group}/{group}_graph.json",
     params:
         type=lambda w: group_type[w.group],
         dict=config["phage_ids_to_names"],
-    output:
-        "results/groups/{group}/{group}_graph.json",
     shell:
         """
         python scripts/build_group.py -o {output} -t {params.type} -d {params.dict} -p {input.phages}
@@ -213,7 +213,7 @@ rule summary_info:
         "results/groups/{group}/{group}_summary.json",
     shell:
         """
-        python scripts/summary.py -o {output} -g {input.group_json} -p {input.phages} 
+        python scripts/summary.py -o {output} -g {input.group_json} -p {input.phages}
         """
 
 
@@ -307,6 +307,21 @@ rule all_groups_info:
         """
 
 
+# plots a figure in SI that shows the relationship between group diversity and synteny
+rule diversity_synteny:
+    input:
+        group_info=rules.all_groups_info.output,
+        nonsyntenic=rules.core_synteny.output,
+        distances=expand(rules.pairwise_metrics.output, group=all_groups),
+    output:
+        figure="results/paper_figures/synteny_diversity.png",
+        figure_pdf="results/paper_figures/synteny_diversity.pdf",
+    shell:
+        """
+        python scripts/diversity_synteny.py -o {output.figure} -p {output.figure_pdf} -i {input.group_info} -n {input.nonsyntenic} -d {input.distances}
+        """
+
+
 # creates a paper figure that displays many properties of all the groups
 rule summary_plots:
     input:
@@ -343,3 +358,4 @@ rule all:
         rules.duplicate_phams.output,
         expand(rules.create_pangenome_graph.output, group=all_groups),
         rules.plot_core_synteny.output,
+        rules.diversity_synteny.output,
