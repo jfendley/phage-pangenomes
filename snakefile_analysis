@@ -121,7 +121,7 @@ rule accessory_pham_locations:
         core_phams=lambda w: group_core[w.group],
     shell:
         """
-        python scripts/accessory_locations.py -o {output} -i {input.group_json} =-d {params.duplicate} -c {params.core_phams}
+        python scripts/accessory_locations.py -o {output} -i {input.group_json} -d {params.duplicate} -c {params.core_phams}
         """
 
 

@@ -38,5 +38,5 @@ mpl.rcParams["font.serif"] = (
 )
 
 # For consistent math text
-mpl.rcParams["mathtext.fontset"] = "cm" if shutil.which("latex") else "Liberation Serif"
+mpl.rcParams["mathtext.fontset"] = "cm" if shutil.which("latex") else "dejavusans"
 mpl.rcParams["text.latex.preamble"] = r"\usepackage{amsmath} \usepackage{amsfonts}"
