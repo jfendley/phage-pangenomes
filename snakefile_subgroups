@@ -1,6 +1,6 @@
 """
 This pipeline runs the analyses on subgroups and regions with multiple haplotypes.
-    It create figures 7 and S7.
+    It creates figures 7, S8, and S11.
 
 Author: Jemma M. Fendley
 """
@@ -18,6 +18,8 @@ wildcard_constraints:
 # load the dictionary of subgroups to their phages
 with open(config["subgroup_phages"]) as f:
     subgroup_phages = json.load(f)
+
+# consider only subgroups with at least ten phages
 all_subgroups = [x for x, y in subgroup_phages.items() if len(y) >= 10]
 
 # load the subgroup to group dictionary
@@ -28,14 +30,14 @@ group_to_subgroups = {
     x: [y for y, z in subgroup_to_group.items() if y in all_subgroups and z == x]
     for x in all_groups
 }
-group_to_all_subgroups = group_to_subgroups = {
+
+# find groups with exactly 2 subgroups with at least 10 phages:
+group_to_all_subgroups = {
     x: [y for y, z in subgroup_to_group.items() if z == x] for x in all_groups
 }
 group_to_sizes = {
     x: [len(subgroup_phages[z]) for z in y] for x, y in group_to_all_subgroups.items()
 }
-
-# groups with exactly 2 subgroups with at least 10 phages:
 groups_for_snp_compatibility = [
     x
     for x, y in group_to_sizes.items()
