@@ -22,21 +22,20 @@ defense-finder update --models-dir defense_finder_models
 
 # now the rest of the script does not require internet access. However, LaTeX
 #   and TeX Live need to be installed to recreate the paper figures. If they 
-#   are not installed, you can modify parameters.py as suggested in the script 
-#   for it to run without LaTeX.
+#   are not installed, the fonts will not match the paper figures.
 
 # run the pipeline that checks core synteny, and creates sytenic groups 
 #   the number of cores can be modified based on computing resources
-#   with 20 cores (64GB memory) this step takes approximately 15 minutes
+#   with 20 cores (64GB memory) this step takes approximately 20 minutes
 
 snakemake --cores 20 -s snakefile_synteny all
 
-# then run all of the non-linkage analyses (about 35 minutes)
+# then run all of the non-linkage analyses (about 45 minutes)
 
 snakemake --cores 20 -s snakefile_analysis all_except_linkage
 
 # then run the linkage analyses. this uses a lot of memory so is best on
-#   only one core, and takes about nine and a half hours
+#   only one core, and takes about eleven hours
 
 snakemake --cores 1 -s snakefile_analysis linkage
 
@@ -49,6 +48,6 @@ snakemake --cores 1 -s snakefile_analysis linkage
 snakemake --cores 20 -s snakefile_subgroups all_except_linkage
 
 # finally, run the subgroup + processing linkage analyses
-#   this step takes around three hours. 
+#   this step takes around four hours. 
 
 snakemake --cores 1 -s snakefile_subgroups linkage
